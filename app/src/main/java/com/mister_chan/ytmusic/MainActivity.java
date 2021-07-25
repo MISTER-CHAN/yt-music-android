@@ -2,7 +2,14 @@ package com.mister_chan.ytmusic;
 
 import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.NotificationCompat;
+import androidx.core.app.NotificationManagerCompat;
 
+import android.annotation.SuppressLint;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.PixelFormat;
@@ -15,6 +22,7 @@ import android.util.AttributeSet;
 import android.util.Log;
 import android.view.*;
 import android.webkit.*;
+import android.widget.RemoteViews;
 import android.widget.TextView;
 
 import java.io.*;
@@ -44,20 +52,20 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private String title = "";
     private String[] lyrics;
-    private TextView tvLyrics;
+    private TextView tvLyrics, tvTitle;
     private WebSettings ws;
     private WebView wv;
     private WindowManager windowManager;
     private WindowManager.LayoutParams wmlp;
 
+    @SuppressLint("RemoteViewLayout")
     @RequiresApi(api = Build.VERSION_CODES.JELLY_BEAN_MR1)
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-
-        //startActivityForResult(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName())), 0);
 
         wv = new MediaWebView(this);
         ((androidx.constraintlayout.widget.ConstraintLayout)findViewById(R.id.cl)).addView(wv);
@@ -78,7 +86,6 @@ public class MainActivity extends AppCompatActivity {
         ws.setCacheMode(WebSettings.LOAD_CACHE_ELSE_NETWORK);
 
         wv.setWebViewClient(new WebViewClient() {
-            @RequiresApi(api = Build.VERSION_CODES.O)
             @Override
             public void onLoadResource(WebView view, String url) {
                 Matcher m = Pattern.compile("(?<=watch\\?v=)\\w+").matcher(url);
@@ -101,16 +108,20 @@ public class MainActivity extends AppCompatActivity {
         wmlp.type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
         tvLyrics = new TextView(this);
         tvLyrics.setPadding(0, 0x100, 0, 0);
-        tvLyrics.setText("YouTube 音樂");
+        tvLyrics.setText("YouTube Music");
         tvLyrics.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
         tvLyrics.setTextColor(0xffff0000);
         tvLyrics.setTextSize(30);
         tvLyrics.setTypeface(Typeface.defaultFromStyle(Typeface.BOLD_ITALIC));
         windowManager.addView(tvLyrics, wmlp);
 
+        NotificationManager nm = (NotificationManager)getSystemService(NOTIFICATION_SERVICE);
+        NotificationChannel nc = new NotificationChannel("channel", "Channel", NotificationManager.IMPORTANCE_HIGH);
+        nm.createNotificationChannel(nc);
+        sendNotification("YouTube Music");
+
         Timer timer = new Timer();
         TimerTask timerTask = new TimerTask() {
-            @RequiresApi(api = Build.VERSION_CODES.KITKAT)
             @Override
             public void run() {
                 runOnUiThread(new Runnable() {
@@ -122,13 +133,24 @@ public class MainActivity extends AppCompatActivity {
                                 public void onReceiveValue(String value) {
                                     try {
                                         int centisec = (int)(Float.parseFloat(value) * 100) * 20 / 1000 * 1000 / 20;
-                                        Log.d("Sec", centisec + "");
                                         String lrc = lyrics[centisec];
                                         if (lrc != null)
                                             tvLyrics.setText(lrc);
                                     } catch (Exception e) {
                                         e.printStackTrace();
                                     }
+                                }
+                            });
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
+                        try {
+                            wv.evaluateJavascript("document.getElementsByClassName(\"slim-video-metadata-title\")[0].textContent", new ValueCallback<String>() {
+                                @Override
+                                public void onReceiveValue(String value) {
+                                    Log.d("Title", value);
+                                    if (value.length() > 4)
+                                        sendNotification(value);
                                 }
                             });
                         } catch (Exception e) {
@@ -144,13 +166,16 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (keyCode == KeyEvent.KEYCODE_BACK) {
-            moveTaskToBack(false);
+            if (wv.canGoBack()) {
+                wv.goBack();
+            } else {
+                moveTaskToBack(false);
+            }
             return true;
         }
         return super.onKeyDown(keyCode, event);
     }
 
-    @RequiresApi(api = Build.VERSION_CODES.O)
     private void readLyrics(String v) {
         lyrics = new String[0x20000];
         try {
@@ -178,5 +203,17 @@ public class MainActivity extends AppCompatActivity {
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    private void sendNotification(String title) {
+        RemoteViews rv = new RemoteViews(getPackageName(), R.layout.notification);
+        rv.setTextViewText(R.id.tv_title, title);
+        Notification n = new Notification.Builder(this, "channel")
+            .setCustomContentView(rv)
+            .setOngoing(true)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .build();
+        n.flags |= Notification.FLAG_NO_CLEAR;
+        NotificationManagerCompat.from(this).notify(0, n);
     }
 }
