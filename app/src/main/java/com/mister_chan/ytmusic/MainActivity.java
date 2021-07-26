@@ -137,7 +137,7 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void onReceivedTitle(WebView view, String title) {
                     if (view.equals(currentPlaying)) {
-                        title = title.substring(0, title.length() - 10);
+                        title = title.replace(" - YouTube", "");
                         setTitle(title);
                         sendNotification(title);
                     }
@@ -272,6 +272,7 @@ public class MainActivity extends AppCompatActivity {
         } catch (UnsupportedEncodingException e) {
             e.printStackTrace();
         } catch (FileNotFoundException e) {
+            tvLyrics.setText("YouTube Music");
             e.printStackTrace();
         } catch (IOException e) {
             e.printStackTrace();
