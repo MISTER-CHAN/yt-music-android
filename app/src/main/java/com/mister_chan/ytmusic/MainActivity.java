@@ -1,27 +1,25 @@
 package com.mister_chan.ytmusic;
 
-import androidx.annotation.RequiresApi;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.NotificationCompat;
+import androidx.constraintlayout.widget.ConstraintLayout;
 import androidx.core.app.NotificationManagerCompat;
 
 import android.annotation.SuppressLint;
+import android.app.ActionBar;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
-import android.app.PendingIntent;
 import android.content.Context;
-import android.content.Intent;
 import android.graphics.PixelFormat;
 import android.graphics.Typeface;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Bundle;
-import android.provider.Settings;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.view.*;
 import android.webkit.*;
+import android.widget.QuickContactBadge;
 import android.widget.RemoteViews;
 import android.widget.TextView;
 
@@ -31,7 +29,7 @@ import java.util.regex.*;
 
 public class MainActivity extends AppCompatActivity {
 
-    public class MediaWebView extends WebView {
+    private class MediaWebView extends WebView {
 
         public MediaWebView(Context context) {
             super(context);
@@ -46,63 +44,103 @@ public class MainActivity extends AppCompatActivity {
         }
 
         @Override
+        public void onPause() {
+
+        }
+
+        @Override
         protected void onWindowVisibilityChanged(int visibility) {
             if (visibility != View.GONE)
                 super.onWindowVisibilityChanged(View.VISIBLE);
         }
     }
 
-    private String title = "";
+    private static String HOME = "https://m.youtube.com";
+    private boolean isPlaying = false;
     private String[] lyrics;
-    private TextView tvLyrics, tvTitle;
-    private WebSettings ws;
-    private WebView wv;
+    private TextView tvLyrics;
+    private WebView currentPlaying, webView;
+    private WebView[] wvs = new WebView[2];
     private WindowManager windowManager;
-    private WindowManager.LayoutParams wmlp;
+
+    private boolean isNumeric(String s) {
+        return Pattern.compile("-?\\d+(\\.\\d+)?").matcher(s).find();
+    }
+
+    public void nextVideo() {
+        currentPlaying.evaluateJavascript("document.getElementById(\"movie_player\").nextVideo()", new ValueCallback<String>() {
+            @Override
+            public void onReceiveValue(String value) {
+
+            }
+        });
+    }
 
     @SuppressLint("RemoteViewLayout")
-    @RequiresApi(api = Build.VERSION_CODES.JELLY_BEAN_MR1)
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        wv = new MediaWebView(this);
-        ((androidx.constraintlayout.widget.ConstraintLayout)findViewById(R.id.cl)).addView(wv);
-        ViewGroup.LayoutParams lp = wv.getLayoutParams();
-        lp.width = ViewGroup.LayoutParams.MATCH_PARENT;
-        lp.height = ViewGroup.LayoutParams.MATCH_PARENT;
-        wv.setLayoutParams(lp);
+        ConstraintLayout cl = findViewById(R.id.cl);
 
-        ws = wv.getSettings();
 
-        ws.setJavaScriptEnabled(true);
-        ws.setRenderPriority(WebSettings.RenderPriority.HIGH);
-        ws.setBlockNetworkImage(true);
-        ws.setAppCacheEnabled(true);
-        ws.setDomStorageEnabled(true);
-        ws.setDatabaseEnabled(true);
-        ws.setAllowFileAccess(true);
-        ws.setCacheMode(WebSettings.LOAD_CACHE_ELSE_NETWORK);
-
-        wv.setWebViewClient(new WebViewClient() {
-            @Override
-            public void onLoadResource(WebView view, String url) {
-                Matcher m = Pattern.compile("(?<=watch\\?v=)\\w+").matcher(url);
-                if (m.find()) {
-                    Log.d("Lyrics", m.group());
-                    readLyrics(m.group());
+        wvs[0] = new MediaWebView(this);
+        wvs[1] = new MediaWebView(this);
+        wvs[0].setTag(wvs[1]);
+        wvs[1].setTag(wvs[0]);
+        currentPlaying = wvs[1];
+        for (WebView wv : wvs) {
+            cl.addView(wv);
+            ViewGroup.LayoutParams lp = wv.getLayoutParams();
+            lp.width = ViewGroup.LayoutParams.MATCH_PARENT;
+            lp.height = ViewGroup.LayoutParams.MATCH_PARENT;
+            wv.setLayoutParams(lp);
+            WebSettings ws = wv.getSettings();
+            ws.setJavaScriptEnabled(true);
+            ws.setRenderPriority(WebSettings.RenderPriority.HIGH);
+            ws.setBlockNetworkImage(true);
+            ws.setAppCacheEnabled(true);
+            ws.setDomStorageEnabled(true);
+            ws.setDatabaseEnabled(true);
+            ws.setAllowFileAccess(true);
+            ws.setCacheMode(WebSettings.LOAD_CACHE_ELSE_NETWORK);
+            ws.setSupportMultipleWindows(true);
+            wv.setWebViewClient(new WebViewClient() {
+                @Override
+                public void onLoadResource(WebView view, String url) {
+                    Matcher m = Pattern.compile("(?<=watch\\?v=)\\w+").matcher(url);
+                    if (m.find()) {
+                        readLyrics(m.group());
+                        currentPlaying = view;
+                        isPlaying = true;
+                        WebView another = (WebView) view.getTag();
+                        another.loadUrl(HOME);
+                    }
+                    super.onLoadResource(view, url);
                 }
-                super.onLoadResource(view, url);
-            }
-        });
-        wv.loadUrl("https://www.youtube.com");
+            });
+            wv.setWebChromeClient(new WebChromeClient() {
+                @Override
+                public void onReceivedTitle(WebView view, String title) {
+                    if (view.equals(currentPlaying)) {
+                        title.replace(" - YouTube", "");
+                        setTitle(title);
+                        sendNotification(title);
+                    }
+                    super.onReceivedTitle(view, title);
+                }
+            });
+        }
+        wvs[1].setVisibility(View.GONE);
+        webView = wvs[0];
+        webView.loadUrl(HOME);
 
         windowManager = (WindowManager)getSystemService(WINDOW_SERVICE);
-        wmlp = new WindowManager.LayoutParams();
+        WindowManager.LayoutParams wmlp = new WindowManager.LayoutParams();
         wmlp.width = WindowManager.LayoutParams.MATCH_PARENT;
         wmlp.height = WindowManager.LayoutParams.WRAP_CONTENT;
-        wmlp.flags = WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
+        wmlp.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL;
         wmlp.format = PixelFormat.RGBA_8888;
         wmlp.gravity = Gravity.CENTER_VERTICAL | Gravity.TOP;
         wmlp.type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
@@ -111,7 +149,7 @@ public class MainActivity extends AppCompatActivity {
         tvLyrics.setText("YouTube Music");
         tvLyrics.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
         tvLyrics.setTextColor(0xffff0000);
-        tvLyrics.setTextSize(30);
+        tvLyrics.setTextSize(24);
         tvLyrics.setTypeface(Typeface.defaultFromStyle(Typeface.BOLD_ITALIC));
         windowManager.addView(tvLyrics, wmlp);
 
@@ -127,35 +165,20 @@ public class MainActivity extends AppCompatActivity {
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-                        try {
-                            wv.evaluateJavascript("document.getElementById(\"movie_player\").getCurrentTime()", new ValueCallback<String>() {
-                                @Override
-                                public void onReceiveValue(String value) {
-                                    try {
-                                        int centisec = (int)(Float.parseFloat(value) * 100) * 20 / 1000 * 1000 / 20;
+                        currentPlaying.evaluateJavascript("document.getElementById(\"movie_player\").getCurrentTime()", new ValueCallback<String>() {
+                            @Override
+                            public void onReceiveValue(String value) {
+                                if (isNumeric(value)) {
+                                    float f = Float.parseFloat(value);
+                                    if (f > 0) {
+                                        int centisec = (int) (f * 100) * 20 / 1000 * 1000 / 20;
                                         String lrc = lyrics[centisec];
                                         if (lrc != null)
                                             tvLyrics.setText(lrc);
-                                    } catch (Exception e) {
-                                        e.printStackTrace();
                                     }
                                 }
-                            });
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                        }
-                        try {
-                            wv.evaluateJavascript("document.getElementsByClassName(\"slim-video-metadata-title\")[0].textContent", new ValueCallback<String>() {
-                                @Override
-                                public void onReceiveValue(String value) {
-                                    Log.d("Title", value);
-                                    if (value.length() > 4)
-                                        sendNotification(value);
-                                }
-                            });
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                        }
+                            }
+                        });
                     }
                 });
             }
@@ -166,14 +189,50 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (keyCode == KeyEvent.KEYCODE_BACK) {
-            if (wv.canGoBack()) {
-                wv.goBack();
+            if (webView.canGoBack()) {
+                if (webView.equals(currentPlaying)) {
+                    WebView another = (WebView) webView.getTag();
+                    WebBackForwardList wbfl = webView.copyBackForwardList();
+                    another.clearHistory();
+                    another.loadUrl(wbfl.getItemAtIndex(wbfl.getCurrentIndex() - 1).getUrl());
+                    webView.setVisibility(View.GONE);
+                    another.setVisibility(View.VISIBLE);
+                    webView = another;
+                } else
+                    webView.goBack();
             } else {
                 moveTaskToBack(false);
             }
             return true;
         }
         return super.onKeyDown(keyCode, event);
+    }
+
+    public void pauseVideo() {
+        currentPlaying.evaluateJavascript("document.getElementById(\"movie_player\").pauseVideo()", new ValueCallback<String>() {
+            @Override
+            public void onReceiveValue(String value) {
+
+            }
+        });
+    }
+
+    public void playVideo() {
+        currentPlaying.evaluateJavascript("document.getElementById(\"movie_player\").playVideo()", new ValueCallback<String>() {
+            @Override
+            public void onReceiveValue(String value) {
+
+            }
+        });
+    }
+
+    public void previousVideo() {
+        currentPlaying.evaluateJavascript("document.getElementById(\"movie_player\").previousVideo()", new ValueCallback<String>() {
+            @Override
+            public void onReceiveValue(String value) {
+
+            }
+        });
     }
 
     private void readLyrics(String v) {
