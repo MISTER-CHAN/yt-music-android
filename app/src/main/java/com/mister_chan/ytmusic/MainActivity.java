@@ -1,12 +1,10 @@
 package com.mister_chan.ytmusic;
 
-import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.constraintlayout.widget.ConstraintLayout;
 import androidx.core.app.NotificationManagerCompat;
 
 import android.annotation.SuppressLint;
-import android.app.ActionBar;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -14,17 +12,16 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.PixelFormat;
 import android.graphics.Typeface;
-import android.net.Uri;
 import android.os.Bundle;
 import android.util.AttributeSet;
-import android.util.Log;
 import android.view.*;
 import android.webkit.*;
-import android.widget.QuickContactBadge;
+import android.widget.LinearLayout;
 import android.widget.RemoteViews;
 import android.widget.TextView;
 
 import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.regex.*;
 
@@ -56,12 +53,31 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private static String HOME = "https://m.youtube.com";
+    private class Skipping {
+        public String v = "";
+        public float when;
+
+        public Skipping(String v, float when) {
+            this.v = v;
+            this.when = when;
+        }
+    }
+
+    private static final String HOME = "https://m.youtube.com";
     private boolean isPlaying = false;
+    private Skipping[] skippingBeginnings = new Skipping[] {
+        new Skipping("l2nRYRiEY6Y", 4),
+        new Skipping("wrczjnLqfZk", 28)
+    };
+    private Skipping[] skippingEndings = new Skipping[] {
+        new Skipping("49tpIMDy9BE", 291)
+    };
+    private LinearLayout ll;
+    private String nowPlaying = "";
     private String[] lyrics;
-    private TextView tvLyrics;
-    private WebView currentPlaying, webView;
-    private WebView[] wvs = new WebView[2];
+    private TextView tvLyrics, tvTitle;
+    private WebView currentPlayingWebView, webView;
+    private final WebView[] wvs = new WebView[2];
     private WindowManager windowManager;
 
     private boolean isNumeric(String s) {
@@ -69,10 +85,9 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void nextVideo() {
-        currentPlaying.evaluateJavascript("document.getElementById(\"movie_player\").nextVideo()", new ValueCallback<String>() {
+        currentPlayingWebView.evaluateJavascript("document.getElementById(\"movie_player\").nextVideo()", new ValueCallback<String>() {
             @Override
             public void onReceiveValue(String value) {
-
             }
         });
     }
@@ -83,16 +98,27 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        ConstraintLayout cl = findViewById(R.id.cl);
+        ll = findViewById(R.id.ll);
+        tvTitle = findViewById(R.id.tv_title);
 
+        tvTitle.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (isPlaying) {
+                    currentPlayingWebView.setVisibility(View.VISIBLE);
+                    ((MediaWebView) currentPlayingWebView.getTag()).setVisibility(View.GONE);
+                    webView = currentPlayingWebView;
+                }
+            }
+        });
 
         wvs[0] = new MediaWebView(this);
         wvs[1] = new MediaWebView(this);
         wvs[0].setTag(wvs[1]);
         wvs[1].setTag(wvs[0]);
-        currentPlaying = wvs[1];
+        currentPlayingWebView = wvs[1];
         for (WebView wv : wvs) {
-            cl.addView(wv);
+            ll.addView(wv);
             ViewGroup.LayoutParams lp = wv.getLayoutParams();
             lp.width = ViewGroup.LayoutParams.MATCH_PARENT;
             lp.height = ViewGroup.LayoutParams.MATCH_PARENT;
@@ -110,10 +136,11 @@ public class MainActivity extends AppCompatActivity {
             wv.setWebViewClient(new WebViewClient() {
                 @Override
                 public void onLoadResource(WebView view, String url) {
-                    Matcher m = Pattern.compile("(?<=watch\\?v=)\\w+").matcher(url);
+                    Matcher m = Pattern.compile("(?<=watch\\?v=)[-0-9A-Za-z]+").matcher(url);
                     if (m.find()) {
-                        readLyrics(m.group());
-                        currentPlaying = view;
+                        nowPlaying = m.group();
+                        readLyrics(nowPlaying);
+                        currentPlayingWebView = view;
                         isPlaying = true;
                         WebView another = (WebView) view.getTag();
                         another.loadUrl(HOME);
@@ -124,6 +151,9 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void onPageFinished(WebView view, String url) {
                     view.getSettings().setBlockNetworkImage(false);
+                    if (currentPlayingWebView == view)
+                        if (!Pattern.compile("(?<=watch\\?v=)[-0-9A-Za-z]+").matcher(url).find())
+                            isPlaying = false;
                     super.onPageFinished(view, url);
                 }
 
@@ -136,9 +166,9 @@ public class MainActivity extends AppCompatActivity {
             wv.setWebChromeClient(new WebChromeClient() {
                 @Override
                 public void onReceivedTitle(WebView view, String title) {
-                    if (view.equals(currentPlaying)) {
+                    if (view == currentPlayingWebView) {
                         title = title.replace(" - YouTube", "");
-                        setTitle(title);
+                        tvTitle.setText(title);
                         sendNotification(title);
                     }
                     super.onReceivedTitle(view, title);
@@ -179,7 +209,7 @@ public class MainActivity extends AppCompatActivity {
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-                        currentPlaying.evaluateJavascript("document.getElementById(\"movie_player\").getCurrentTime()", new ValueCallback<String>() {
+                        currentPlayingWebView.evaluateJavascript("document.getElementById(\"movie_player\").getCurrentTime()", new ValueCallback<String>() {
                             @Override
                             public void onReceiveValue(String value) {
                                 if (isNumeric(value)) {
@@ -189,6 +219,24 @@ public class MainActivity extends AppCompatActivity {
                                         String lrc = lyrics[centisec];
                                         if (lrc != null)
                                             tvLyrics.setText(lrc);
+                                        for (Skipping s : skippingBeginnings) {
+                                            if (nowPlaying.equals(s.v))
+                                                if (f < s.when)
+                                                    currentPlayingWebView.evaluateJavascript("document.getElementById(\"movie_player\").seekTo(" + s.when + ")", new ValueCallback<String>() {
+                                                        @Override
+                                                        public void onReceiveValue(String value) {
+                                                        }
+                                                    });
+                                        }
+                                        for (Skipping s : skippingEndings) {
+                                            if (nowPlaying.equals(s.v))
+                                                if (f >= s.when)
+                                                    currentPlayingWebView.evaluateJavascript("var o = document.getElementById(\"movie_player\"); o.seekTo(o.getDuration())", new ValueCallback<String>() {
+                                                        @Override
+                                                        public void onReceiveValue(String value) {
+                                                        }
+                                                    });
+                                        }
                                     }
                                 }
                             }
@@ -204,7 +252,7 @@ public class MainActivity extends AppCompatActivity {
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (keyCode == KeyEvent.KEYCODE_BACK) {
             if (webView.canGoBack()) {
-                if (webView.equals(currentPlaying)) {
+                if (webView == currentPlayingWebView) {
                     WebView another = (WebView) webView.getTag();
                     WebBackForwardList wbfl = webView.copyBackForwardList();
                     another.clearHistory();
@@ -223,7 +271,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void pauseVideo() {
-        currentPlaying.evaluateJavascript("document.getElementById(\"movie_player\").pauseVideo()", new ValueCallback<String>() {
+        currentPlayingWebView.evaluateJavascript("document.getElementById(\"movie_player\").pauseVideo()", new ValueCallback<String>() {
             @Override
             public void onReceiveValue(String value) {
 
@@ -232,7 +280,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void playVideo() {
-        currentPlaying.evaluateJavascript("document.getElementById(\"movie_player\").playVideo()", new ValueCallback<String>() {
+        currentPlayingWebView.evaluateJavascript("document.getElementById(\"movie_player\").playVideo()", new ValueCallback<String>() {
             @Override
             public void onReceiveValue(String value) {
 
@@ -241,7 +289,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void previousVideo() {
-        currentPlaying.evaluateJavascript("document.getElementById(\"movie_player\").previousVideo()", new ValueCallback<String>() {
+        currentPlayingWebView.evaluateJavascript("document.getElementById(\"movie_player\").previousVideo()", new ValueCallback<String>() {
             @Override
             public void onReceiveValue(String value) {
 
@@ -254,7 +302,7 @@ public class MainActivity extends AppCompatActivity {
         try {
             BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(
                 new File("/sdcard/YTMusic/" + v + ".lrc")
-            ),"UTF-8"));
+            ), StandardCharsets.UTF_8));
             String line = "";
             while ((line = br.readLine()) != null) {
                 Matcher m = Pattern.compile(
