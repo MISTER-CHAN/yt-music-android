@@ -11,6 +11,7 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.graphics.PixelFormat;
 import android.graphics.Typeface;
 import android.net.Uri;
@@ -119,12 +120,24 @@ public class MainActivity extends AppCompatActivity {
                     }
                     super.onLoadResource(view, url);
                 }
+
+                @Override
+                public void onPageFinished(WebView view, String url) {
+                    view.getSettings().setBlockNetworkImage(false);
+                    super.onPageFinished(view, url);
+                }
+
+                @Override
+                public void onPageStarted(WebView view, String url, Bitmap favicon) {
+                    view.getSettings().setBlockNetworkImage(true);
+                    super.onPageStarted(view, url, favicon);
+                }
             });
             wv.setWebChromeClient(new WebChromeClient() {
                 @Override
                 public void onReceivedTitle(WebView view, String title) {
                     if (view.equals(currentPlaying)) {
-                        title.replace(" - YouTube", "");
+                        title = title.substring(0, title.length() - 10);
                         setTitle(title);
                         sendNotification(title);
                     }
@@ -145,6 +158,7 @@ public class MainActivity extends AppCompatActivity {
         wmlp.gravity = Gravity.CENTER_VERTICAL | Gravity.TOP;
         wmlp.type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
         tvLyrics = new TextView(this);
+        tvLyrics.setMaxLines(1);
         tvLyrics.setPadding(0, 0x100, 0, 0);
         tvLyrics.setText("YouTube Music");
         tvLyrics.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
@@ -183,7 +197,7 @@ public class MainActivity extends AppCompatActivity {
                 });
             }
         };
-        timer.schedule(timerTask, 1000, 500);
+        timer.schedule(timerTask, 1000, 100);
     }
 
     @Override
