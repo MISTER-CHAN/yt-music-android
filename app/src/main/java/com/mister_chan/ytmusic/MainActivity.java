@@ -292,12 +292,14 @@ public class MainActivity extends AppCompatActivity {
                                         } else {
                                             beginningDuration = f;
                                         }
-                                        if (f >= endingDuration) {
-                                            player.evaluateJavascript("var player = " + PLAYER + "; player.seekTo(player.getDuration())", new ValueCallback<String>() {
-                                                @Override
-                                                public void onReceiveValue(String value) {
-                                                }
-                                            });
+                                        if (endingDuration > 0) {
+                                            if (f >= endingDuration) {
+                                                player.evaluateJavascript("var player = " + PLAYER + "; player.seekTo(player.getDuration())", new ValueCallback<String>() {
+                                                    @Override
+                                                    public void onReceiveValue(String value) {
+                                                    }
+                                                });
+                                            }
                                         }
                                     }
                                 }
