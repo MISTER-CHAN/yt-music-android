@@ -65,7 +65,6 @@ public class MainActivity extends AppCompatActivity {
     private static final String HOME = "https://m.youtube.com", PLAYER = "document.getElementById(\"movie_player\")";
     private boolean isPlaying = false, shouldGetPlaylist = false, shouldSkipBeginning = false;
     private float beginningDuration = 0, endingDuration = 0;
-    private int currentShuffledIndex = -2;
     private LinearLayout ll, llShuffle;
     private List<String> playlistVideos = new ArrayList<>();
     private Button bPlayPause;
