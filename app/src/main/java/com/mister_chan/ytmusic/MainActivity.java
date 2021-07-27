@@ -64,7 +64,7 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String HOME = "https://m.youtube.com", PLAYER = "document.getElementById(\"movie_player\")";
     private boolean isPlaying = false, shouldGetPlaylist = false, shouldSkipBeginning = false;
-    private float beginningDuration = 0, endingDuration = 0;
+    private float beginningDuration = 0, endingDuration = 0, t = 0;
     private LinearLayout ll, llShuffle;
     private List<String> playlistVideos = new ArrayList<>();
     private Button bPlayPause;
@@ -212,6 +212,11 @@ public class MainActivity extends AppCompatActivity {
                     }
                 }
                 endingDuration = 0;
+                player.evaluateJavascript(PLAYER + ".unmute()", new ValueCallback<String>() {
+                    @Override
+                    public void onReceiveValue(String value) {
+                    }
+                });
                 for (Skipping s : skippingEndings) {
                     if (nowPlaying.equals(s.v)) {
                         endingDuration = s.when;
@@ -246,10 +251,9 @@ public class MainActivity extends AppCompatActivity {
                 String v = isVideo(url);
                 if (v == null) {
                     view.goBack();
-                    webView.loadUrl(url);
+                    webView.loadUrl(url + "&t=" + t + "s");
                     player.setVisibility(View.GONE);
                     webView.setVisibility(View.VISIBLE);
-                    shouldSkipBeginning = true;
                 } else if (!v.equals(nowPlaying)) {
                     readLyrics(v);
                     nowPlaying = v;
@@ -329,7 +333,7 @@ public class MainActivity extends AppCompatActivity {
                                                 shouldSkipBeginning = false;
                                             }
                                         } else {
-                                            beginningDuration = f;
+                                            t = f;
                                         }
                                         if (endingDuration > 0) {
                                             if (f >= endingDuration) {
