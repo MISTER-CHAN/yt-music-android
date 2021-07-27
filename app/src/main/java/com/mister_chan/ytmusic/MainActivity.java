@@ -14,6 +14,7 @@ import android.graphics.PixelFormat;
 import android.graphics.Typeface;
 import android.os.Bundle;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.view.*;
 import android.webkit.*;
 import android.widget.*;
@@ -62,9 +63,11 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private static final String HOME = "https://m.youtube.com", PLAYER = "document.getElementById(\"movie_player\")";
-    private boolean isPlaying = false, shouldSkipBeginning = false;
+    private boolean isPlaying = false, shouldGetPlaylist = false, shouldSkipBeginning = false;
     private float beginningDuration = 0, endingDuration = 0;
-    private LinearLayout ll;
+    private int currentShuffledIndex = -2;
+    private LinearLayout ll, llShuffle;
+    private List<String> playlistVideos = new ArrayList<>();
     private Button bPlayPause;
     private final Skipping[] skippingBeginnings = new Skipping[] {
             new Skipping("l2nRYRiEY6Y", 4),
@@ -73,7 +76,7 @@ public class MainActivity extends AppCompatActivity {
     private final Skipping[] skippingEndings = new Skipping[] {
             new Skipping("49tpIMDy9BE", 291)
     };
-    private String nowPlaying = "";
+    private String nowPlaying = "", playlist = "";
     private String[] lyrics;
     private TextView tvLyrics, tvTitle;
     private WebView player, webView;
@@ -84,7 +87,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private String isVideo(String url) {
-        Matcher m = Pattern.compile("(?<=watch\\?v=)[-0-9A-Za-z]+").matcher(url);
+        Matcher m = Pattern.compile("(?<=watch\\?v=)[-0-9A-Z_a-z]+").matcher(url);
         if (m.find()) {
             return m.group();
         }
@@ -109,14 +112,6 @@ public class MainActivity extends AppCompatActivity {
         ws.setSupportMultipleWindows(true);
     }
 
-    public void nextVideo() {
-        player.evaluateJavascript(PLAYER + ".nextVideo()", new ValueCallback<String>() {
-            @Override
-            public void onReceiveValue(String value) {
-            }
-        });
-    }
-
     @SuppressLint({"RemoteViewLayout", "JavascriptInterface"})
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -125,6 +120,7 @@ public class MainActivity extends AppCompatActivity {
 
         bPlayPause = findViewById(R.id.b_play_pause);
         ll = findViewById(R.id.ll);
+        llShuffle = findViewById(R.id.ll_shuffle);
         tvTitle = findViewById(R.id.tv_title);
 
         bPlayPause.setTypeface(Typeface.createFromAsset(getAssets(), "Player.ttf"));
@@ -136,6 +132,19 @@ public class MainActivity extends AppCompatActivity {
                     public void onReceiveValue(String value) {
                     }
                 });
+            }
+        });
+        findViewById(R.id.tv_shuffle).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                llShuffle.setVisibility(View.GONE);
+                Collections.shuffle(playlistVideos);
+            }
+        });
+        findViewById(R.id.tv_dont_shuffle).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                llShuffle.setVisibility(View.GONE);
             }
         });
         ll.setOnClickListener(new View.OnClickListener() {
@@ -190,6 +199,11 @@ public class MainActivity extends AppCompatActivity {
                     public void onReceiveValue(String value) {
                     }
                 });
+                player.evaluateJavascript(PLAYER + ".setShuffle(true)", new ValueCallback<String>() {
+                    @Override
+                    public void onReceiveValue(String value) {
+                    }
+                });
                 if (!shouldSkipBeginning) {
                     for (Skipping s : skippingBeginnings) {
                         if (nowPlaying.equals(s.v)) {
@@ -203,6 +217,19 @@ public class MainActivity extends AppCompatActivity {
                     if (nowPlaying.equals(s.v)) {
                         endingDuration = s.when;
                     }
+                }
+                Matcher matcherList = Pattern.compile("(?<=list=)[-0-9A-Z_a-z]+").matcher(url);
+                if (matcherList.find()) {
+                    String group = matcherList.group();
+                    if (!group.equals(playlist)) {
+                        playlist = group;
+                        playlistVideos = new ArrayList<>();
+                        shouldGetPlaylist = true;
+                    }
+                } else {
+                    llShuffle.setVisibility(View.GONE);
+                    playlistVideos = new ArrayList<>();
+                    playlist = "";
                 }
                 super.onPageFinished(view, url);
             }
@@ -279,6 +306,19 @@ public class MainActivity extends AppCompatActivity {
                                         if (lrc != null) {
                                             tvLyrics.setText(lrc);
                                         }
+                                        if (shouldGetPlaylist) {
+                                            llShuffle.setVisibility(View.VISIBLE);
+                                            player.evaluateJavascript("var elements = document.getElementsByClassName(\"compact-media-item-metadata-content\"), value = \"\"; for (var i = 0; i < elements.length; i++) { var href = elements[i].href, r = /(?<=v=)[-0-9A-Z_a-z]+?/; if (r.test(href)) { if (href.match(r)[0] != \"" + nowPlaying + "\") { value += \",\" + href } } } value.slice(1)", new ValueCallback<String>() {
+                                                @Override
+                                                public void onReceiveValue(String value) {
+                                                    String[] hrefs = value.split(",");
+                                                    playlistVideos.addAll(Arrays.asList(hrefs));
+                                                    if (playlistVideos.size() > 1) {
+                                                        shouldGetPlaylist = false;
+                                                    }
+                                                }
+                                            });
+                                        }
                                         if (shouldSkipBeginning) {
                                             if (f < beginningDuration) {
                                                 player.evaluateJavascript(PLAYER + ".seekTo(" + beginningDuration + ")", new ValueCallback<String>() {
@@ -332,10 +372,20 @@ public class MainActivity extends AppCompatActivity {
 
     @JavascriptInterface
     public void onStateChange(int data) {
-        bPlayPause.setText(data == 1 ? "⏸" : "⏵");
+        bPlayPause.setText(data == 1 /* playing */ ? "⏸" : "⏵");
         switch (data) {
             case 0: // ended
-                isPlaying = false;
+                if (playlistVideos.size() > 1) {
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            player.loadUrl(playlistVideos.get(0));
+                            playlistVideos.remove(0);
+                        }
+                    });
+                } else {
+                    isPlaying = false;
+                }
                 break;
         }
     }
@@ -350,14 +400,6 @@ public class MainActivity extends AppCompatActivity {
 
     public void playVideo() {
         player.evaluateJavascript(PLAYER + ".playVideo()", new ValueCallback<String>() {
-            @Override
-            public void onReceiveValue(String value) {
-            }
-        });
-    }
-
-    public void previousVideo() {
-        player.evaluateJavascript(PLAYER + ".previousVideo()", new ValueCallback<String>() {
             @Override
             public void onReceiveValue(String value) {
             }

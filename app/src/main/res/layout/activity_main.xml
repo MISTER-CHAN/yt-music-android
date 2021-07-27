@@ -22,11 +22,33 @@
             android:text="YouTube Music"
             android:textColor="@color/white"
             android:textSize="16sp" />
-        <Button
-            android:id="@+id/b_play_pause"
+        <LinearLayout
+            android:id="@+id/ll_shuffle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_weight="2"
+            android:gravity="center"
+            android:visibility="gone">
+            <TextView
+                android:id="@+id/tv_shuffle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:padding="8dp"
+                android:text="⤭"
+                android:textColor="@color/white"
+                android:textSize="24sp" />
+            <TextView
+                android:id="@+id/tv_dont_shuffle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:padding="8dp"
+                android:text="⥤"
+                android:textColor="@color/white"
+                android:textSize="24sp" />
+        </LinearLayout>
+        <Button
+            android:id="@+id/b_play_pause"
+            android:layout_width="32dp"
+            android:layout_height="wrap_content"
             android:text="⏵"
             android:textColor="@color/white"
             android:textSize="24sp"
