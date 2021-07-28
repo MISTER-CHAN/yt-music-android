@@ -1,5 +1,6 @@
 package com.mister_chan.ytmusic;
 
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.NotificationManagerCompat;
 
@@ -181,6 +182,15 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 view.getSettings().setBlockNetworkImage(false);
+                view.loadUrl("javascript:(function() {" +
+                        "var parent = document.getElementsByTagName('head')[0];" +
+                        "var style = document.createElement('style');" +
+                        "var body = document.getElementsByTagName('body')[0];" +
+                        "style.type = 'text/css';" +
+                        "style.innerHTML = \"@font-face{font-family:MISTER_CHAN;src:url('file:///storage/emulated/0/Fonts/MISTER_CHAN_CJK.ttf');}*{font-family:MISTER_CHAN !important}\";" +
+                        "parent.appendChild(style);" +
+                        "body.style.fontFamily = \"MISTER_CHAN\"" +
+                        "})()");
                 super.onPageFinished(view, url);
             }
 
@@ -188,6 +198,22 @@ public class MainActivity extends AppCompatActivity {
             public void onPageStarted(WebView view, String url, Bitmap favicon) {
                 view.getSettings().setBlockNetworkImage(true);
                 super.onPageStarted(view, url, favicon);
+            }
+
+            @Nullable
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                if (request.getUrl().toString().contains("MISTER_CHAN")) {
+                    try {
+                        InputStream is = new FileInputStream(
+                               new File("/storage/emulated/0/Fonts/MISTER_CHAN_CJK.ttf")
+                        );
+                        return new WebResourceResponse("application/x-font-ttf", "UTF-8", is);
+                    } catch (FileNotFoundException e) {
+                        e.printStackTrace();
+                    }
+                }
+                return super.shouldInterceptRequest(view, request);
             }
         });
         player.setWebViewClient(new WebViewClient() {
