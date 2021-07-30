@@ -1,29 +1,61 @@
 package com.mister_chan.ytmusic;
 
-import androidx.annotation.Nullable;
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.NotificationManagerCompat;
-
 import android.annotation.SuppressLint;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.app.PendingIntent;
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.PixelFormat;
 import android.graphics.Typeface;
 import android.os.Bundle;
 import android.util.AttributeSet;
-import android.util.Log;
-import android.view.*;
-import android.webkit.*;
-import android.widget.*;
+import android.view.Gravity;
+import android.view.KeyEvent;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.WindowManager;
+import android.webkit.JavascriptInterface;
+import android.webkit.ValueCallback;
+import android.webkit.WebChromeClient;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import android.widget.Button;
+import android.widget.LinearLayout;
+import android.widget.RemoteViews;
+import android.widget.TextView;
+import android.widget.Toast;
 
-import java.io.*;
+import androidx.annotation.Nullable;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.NotificationCompat;
+import androidx.core.app.NotificationManagerCompat;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.UnsupportedEncodingException;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
-import java.util.regex.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Timer;
+import java.util.TimerTask;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -53,6 +85,107 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private class LyricsTimerTask extends TimerTask {
+        @Override
+        public void run() {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    player.evaluateJavascript("document.getElementById(\"movie_player\").getCurrentTime()", new ValueCallback<String>() {
+                        @Override
+                        public void onReceiveValue(String value) {
+                            if (isNumeric(value)) {
+                                float f = Float.parseFloat(value);
+                                if (f > 0) {
+                                    int centisec = (int) (f * 100) * 20 / 1000 * 1000 / 20;
+                                    String lrc = lyrics[centisec];
+                                    if (lrc != null) {
+                                        tvLyrics.setText(lrc);
+                                    }
+                                    if (shouldGetPlaylist) {
+                                        llShuffle.setVisibility(View.VISIBLE);
+                                        player.evaluateJavascript(
+                                                "  var elements = document.getElementsByClassName(\"compact-media-item-metadata-content\"), value = \"\";" +
+                                                        "for (var i = 0; i < elements.length; i++) {" +
+                                                        "    var href = elements[i].href, r = /(?<=v=)[-0-9A-Z_a-z]+?/;" +
+                                                        "    if (r.test(href)) {" +
+                                                        "        if (href.match(r)[0] != \"" + nowPlaying + "\") {" +
+                                                        "            value += \",\" + href" +
+                                                        "        }" +
+                                                        "    }" +
+                                                        "}" +
+                                                        "value.slice(1)",
+                                                new ValueCallback<String>() {
+                                                    public void onReceiveValue(String value) {
+                                                        String[] hrefs = value.split(",");
+                                                        playlistVideos.addAll(Arrays.asList(hrefs));
+                                                        if (playlistVideos.size() > 1) {
+                                                            shouldGetPlaylist = false;
+                                                            isShuffled = false;
+                                                        }
+                                                    }
+                                                });
+                                    }
+                                    if (shouldSkipBeginning) {
+                                        if (f < beginningDuration) {
+                                            player.evaluateJavascript(PLAYER + ".seekTo(" + beginningDuration + ")", new ValueCallback<String>() {
+                                                @Override
+                                                public void onReceiveValue(String value) {
+                                                }
+                                            });
+                                        } else {
+                                            shouldSkipBeginning = false;
+                                        }
+                                    } else {
+                                        beginningDuration = f;
+                                    }
+                                    if (endingDuration > 0) {
+                                        if (f >= endingDuration) {
+                                            player.evaluateJavascript("var player = " + PLAYER + "; player.seekTo(player.getDuration())", new ValueCallback<String>() {
+                                                @Override
+                                                public void onReceiveValue(String value) {
+                                                }
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+            });
+        }
+    }
+
+    private class NotificationReceiver extends BroadcastReceiver {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            String action = intent.getAction();
+            switch (action) {
+                case "com.mister_chan.ytmusic.play":
+                    player.loadUrl("javascript:" + PLAYER + ".playVideo()");
+                    break;
+                case "com.mister_chan.ytmusic.pause":
+                    player.loadUrl("javascript:" + PLAYER + ".pauseVideo()");
+                    break;
+                case "com.mister_chan.ytmusic.lyrics":
+                    int visibility = tvLyrics.getVisibility();
+                    switch (visibility) {
+                        case View.VISIBLE:
+                            timer.cancel();
+                            tvLyrics.setVisibility(View.GONE);
+                            break;
+                        case View.GONE:
+                            timer = new Timer();
+                            timer.schedule(new LyricsTimerTask(), 1000, 100);
+                            tvLyrics.setVisibility(View.VISIBLE);
+                            break;
+                    }
+                    break;
+            }
+        }
+    }
+
     private static class Skipping {
         public String v = "";
         public float when;
@@ -65,10 +198,13 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String HOME = "https://m.youtube.com", PLAYER = "document.getElementById(\"movie_player\")";
     private boolean isPlaying = false, isShuffled = false, shouldGetPlaylist = false, shouldSkipBeginning = false;
-    private float beginningDuration = 0, endingDuration = 0, t = 0;
+    private Button bPlayPause;
+    private float beginningDuration = 0, endingDuration = 0;
+    private int playerState = 0;
     private LinearLayout ll, llShuffle;
     private List<String> playlistVideos = new ArrayList<>();
-    private Button bPlayPause;
+    private NotificationCompat.Action lyricsAction;
+    private RemoteViews rv;
     private final Skipping[] skippingBeginnings = new Skipping[] {
             new Skipping("l2nRYRiEY6Y", 4),
             new Skipping("wrczjnLqfZk", 28)
@@ -76,9 +212,11 @@ public class MainActivity extends AppCompatActivity {
     private final Skipping[] skippingEndings = new Skipping[] {
             new Skipping("49tpIMDy9BE", 291)
     };
-    private String nowPlaying = "", playlist = "";
+    private String nowPlaying = "", playlist = "", title = "";
     private String[] lyrics;
     private TextView tvLyrics, tvTitle;
+    private Timer timer;
+    private TimerTask timerTask;
     private WebView player, webView;
     private WindowManager windowManager;
 
@@ -94,6 +232,7 @@ public class MainActivity extends AppCompatActivity {
         return null;
     }
 
+    @SuppressLint("SetJavaScriptEnabled")
     private void initialWebView(WebView wv) {
         ll.addView(wv);
         ViewGroup.LayoutParams lp = wv.getLayoutParams();
@@ -206,7 +345,7 @@ public class MainActivity extends AppCompatActivity {
                 if (request.getUrl().toString().contains("MISTER_CHAN")) {
                     try {
                         InputStream is = new FileInputStream(
-                               new File("/storage/emulated/0/Fonts/MISTER_CHAN_CJK.ttf")
+                                "/storage/emulated/0/Fonts/MISTER_CHAN_CJK.ttf"
                         );
                         return new WebResourceResponse("application/x-font-ttf", "UTF-8", is);
                     } catch (FileNotFoundException e) {
@@ -306,82 +445,25 @@ public class MainActivity extends AppCompatActivity {
         windowManager.addView(tvLyrics, wmlp);
 
         NotificationManager nm = (NotificationManager)getSystemService(NOTIFICATION_SERVICE);
-        NotificationChannel nc = new NotificationChannel("channel", "Channel", NotificationManager.IMPORTANCE_HIGH);
+        NotificationChannel nc = new NotificationChannel("channel", "Channel", NotificationManager.IMPORTANCE_LOW);
         nm.createNotificationChannel(nc);
+        /*
+         * rv = new RemoteViews(getPackageName(), R.layout.notification);
+         * rv.setTextViewText(R.id.tv_title, "YouTube Music");
+         */
+        IntentFilter intentFilter = new IntentFilter();
+        intentFilter.addAction("com.mister_chan.ytmusic.play");
+        intentFilter.addAction("com.mister_chan.ytmusic.pause");
+        intentFilter.addAction("com.mister_chan.ytmusic.lyrics");
+        Intent intent = new Intent();
+        intent.setAction("com.mister_chan.ytmusic.lyrics");
+        PendingIntent pendingIntent = PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
+        lyricsAction = new NotificationCompat.Action.Builder(R.drawable.ic_lyrics, "Lyrics", pendingIntent).build();
+        registerReceiver(new NotificationReceiver(), intentFilter);
         sendNotification("YouTube Music");
 
-        Timer timer = new Timer();
-        TimerTask timerTask = new TimerTask() {
-            @Override
-            public void run() {
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        player.evaluateJavascript("document.getElementById(\"movie_player\").getCurrentTime()", new ValueCallback<String>() {
-                            @Override
-                            public void onReceiveValue(String value) {
-                                if (isNumeric(value)) {
-                                    float f = Float.parseFloat(value);
-                                    if (f > 0) {
-                                        int centisec = (int) (f * 100) * 20 / 1000 * 1000 / 20;
-                                        String lrc = lyrics[centisec];
-                                        if (lrc != null) {
-                                            tvLyrics.setText(lrc);
-                                        }
-                                        if (shouldGetPlaylist) {
-                                            llShuffle.setVisibility(View.VISIBLE);
-                                            player.evaluateJavascript(
-                                                    "  var elements = document.getElementsByClassName(\"compact-media-item-metadata-content\"), value = \"\";" +
-                                                            "for (var i = 0; i < elements.length; i++) {" +
-                                                            "    var href = elements[i].href, r = /(?<=v=)[-0-9A-Z_a-z]+?/;" +
-                                                            "    if (r.test(href)) {" +
-                                                            "        if (href.match(r)[0] != \"" + nowPlaying + "\") {" +
-                                                            "            value += \",\" + href" +
-                                                            "        }" +
-                                                            "    }" +
-                                                            "}" +
-                                                            "value.slice(1)",
-                                                    new ValueCallback<String>() {
-                                                        public void onReceiveValue(String value) {
-                                                            String[] hrefs = value.split(",");
-                                                            playlistVideos.addAll(Arrays.asList(hrefs));
-                                                            if (playlistVideos.size() > 1) {
-                                                                shouldGetPlaylist = false;
-                                                                isShuffled = false;
-                                                            }
-                                                        }
-                                                    });
-                                        }
-                                        if (shouldSkipBeginning) {
-                                            if (f < beginningDuration) {
-                                                player.evaluateJavascript(PLAYER + ".seekTo(" + beginningDuration + ")", new ValueCallback<String>() {
-                                                    @Override
-                                                    public void onReceiveValue(String value) {
-                                                    }
-                                                });
-                                            } else {
-                                                shouldSkipBeginning = false;
-                                            }
-                                        } else {
-                                            beginningDuration = f;
-                                        }
-                                        if (endingDuration > 0) {
-                                            if (f >= endingDuration) {
-                                                player.evaluateJavascript("var player = " + PLAYER + "; player.seekTo(player.getDuration())", new ValueCallback<String>() {
-                                                    @Override
-                                                    public void onReceiveValue(String value) {
-                                                    }
-                                                });
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        });
-                    }
-                });
-            }
-        };
+        timer = new Timer();
+        timerTask = new LyricsTimerTask();
         timer.schedule(timerTask, 1000, 100);
     }
 
@@ -406,6 +488,7 @@ public class MainActivity extends AppCompatActivity {
     @JavascriptInterface
     public void onStateChange(int data) {
         bPlayPause.setText(data == 1 /* playing */ ? "⏸" : "⏵");
+        sendNotification(data);
         switch (data) {
             case 0: // ended
                 if (playlistVideos.size() > 1) {
@@ -427,27 +510,11 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    public void pauseVideo() {
-        player.evaluateJavascript(PLAYER + ".pauseVideo()", new ValueCallback<String>() {
-            @Override
-            public void onReceiveValue(String value) {
-            }
-        });
-    }
-
-    public void playVideo() {
-        player.evaluateJavascript(PLAYER + ".playVideo()", new ValueCallback<String>() {
-            @Override
-            public void onReceiveValue(String value) {
-            }
-        });
-    }
-
     private void readLyrics(String v) {
         lyrics = new String[0x20000];
         try {
             BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(
-                new File("/sdcard/YTMusic/" + v + ".lrc")
+                    "/sdcard/YTMusic/" + v + ".lrc"
             ), StandardCharsets.UTF_8));
             String line = "";
             while ((line = br.readLine()) != null) {
@@ -473,15 +540,40 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void sendNotification(String title) {
-        RemoteViews rv = new RemoteViews(getPackageName(), R.layout.notification);
-        rv.setTextViewText(R.id.tv_title, title);
-        Notification n = new Notification.Builder(this, "channel")
-            .setCustomContentView(rv)
-            .setOngoing(true)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .build();
-        n.flags |= Notification.FLAG_NO_CLEAR;
-        NotificationManagerCompat.from(this).notify(0, n);
+    private void sendNotification(String contentText) {
+        sendNotification(contentText, playerState);
+    }
+
+    private void sendNotification(int playerState) {
+        sendNotification(title, playerState);
+    }
+
+    private void sendNotification(String contentText, int playerState) {
+        title = contentText;
+        this.playerState = playerState;
+        Intent intent = new Intent();
+        NotificationCompat.Action playPauseAction;
+        if (playerState == 1) {
+            intent.setAction("com.mister_chan.ytmusic.pause");
+            PendingIntent pendingIntent = PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
+            playPauseAction = new NotificationCompat.Action.Builder(R.drawable.ic_pause, "Pause", pendingIntent).build();
+        } else {
+            intent.setAction("com.mister_chan.ytmusic.play");
+            PendingIntent pendingIntent = PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
+            playPauseAction = new NotificationCompat.Action.Builder(R.drawable.ic_play, "Play", pendingIntent).build();
+        }
+        Notification notification = new NotificationCompat.Builder(this, "channel")
+                .addAction(playPauseAction)
+                .addAction(lyricsAction)
+             // .setCustomContentView(rv)
+                .setContentText(contentText)
+                .setOngoing(true)
+                .setSmallIcon(R.drawable.ic_launcher_foreground)
+                .setStyle(new androidx.media.app.NotificationCompat.MediaStyle()
+                        .setShowActionsInCompactView(0))
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .build();
+        notification.flags |= Notification.FLAG_NO_CLEAR;
+        NotificationManagerCompat.from(this).notify(0, notification);
     }
 }
