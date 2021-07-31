@@ -14,6 +14,7 @@ import android.graphics.Color;
 import android.graphics.PixelFormat;
 import android.graphics.Typeface;
 import android.os.Bundle;
+import android.os.PowerManager;
 import android.util.AttributeSet;
 import android.view.Gravity;
 import android.view.KeyEvent;
@@ -23,6 +24,7 @@ import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
+import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
@@ -32,7 +34,6 @@ import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.RemoteViews;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
@@ -40,7 +41,6 @@ import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 
 import java.io.BufferedReader;
-import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -71,10 +71,6 @@ public class MainActivity extends AppCompatActivity {
 
         public MediaWebView(Context context, AttributeSet attrs, int defStyleAttr) {
             super(context, attrs, defStyleAttr);
-        }
-
-        @Override
-        public void onPause() {
         }
 
         @Override
@@ -168,6 +164,9 @@ public class MainActivity extends AppCompatActivity {
                 case "com.mister_chan.ytmusic.pause":
                     player.loadUrl("javascript:" + PLAYER + ".pauseVideo()");
                     break;
+                case "com.mister_chan.ytmusic.next":
+                    player.loadUrl("javascript:" + PLAYER + ".seekTo(" + PLAYER + ".getDuration())");
+                    break;
                 case "com.mister_chan.ytmusic.lyrics":
                     int visibility = tvLyrics.getVisibility();
                     switch (visibility) {
@@ -198,12 +197,12 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String HOME = "https://m.youtube.com", PLAYER = "document.getElementById(\"movie_player\")";
     private boolean isPlaying = false, isShuffled = false, shouldGetPlaylist = false, shouldSkipBeginning = false;
-    private Button bPlayPause;
+    private Button bPlayPause, bReload;
     private float beginningDuration = 0, endingDuration = 0;
     private int playerState = 0;
-    private LinearLayout ll, llShuffle;
+    private LinearLayout llWebView, llShuffle, llTitle;
     private List<String> playlistVideos = new ArrayList<>();
-    private NotificationCompat.Action lyricsAction;
+    private NotificationCompat.Action lyricsAction, nextAction;
     private RemoteViews rv;
     private final Skipping[] skippingBeginnings = new Skipping[] {
             new Skipping("l2nRYRiEY6Y", 4),
@@ -217,6 +216,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView tvLyrics, tvTitle;
     private Timer timer;
     private TimerTask timerTask;
+    private PowerManager.WakeLock wakeLock;
     private WebView player, webView;
     private WindowManager windowManager;
 
@@ -234,7 +234,7 @@ public class MainActivity extends AppCompatActivity {
 
     @SuppressLint("SetJavaScriptEnabled")
     private void initialWebView(WebView wv) {
-        ll.addView(wv);
+        llWebView.addView(wv);
         ViewGroup.LayoutParams lp = wv.getLayoutParams();
         lp.width = ViewGroup.LayoutParams.MATCH_PARENT;
         lp.height = ViewGroup.LayoutParams.MATCH_PARENT;
@@ -251,15 +251,17 @@ public class MainActivity extends AppCompatActivity {
         ws.setSupportMultipleWindows(true);
     }
 
-    @SuppressLint({"RemoteViewLayout", "JavascriptInterface"})
+    @SuppressLint({"RemoteViewLayout", "JavascriptInterface", "InvalidWakeLockTag"})
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
         bPlayPause = findViewById(R.id.b_play_pause);
-        ll = findViewById(R.id.ll);
+        bReload = findViewById(R.id.b_reload);
         llShuffle = findViewById(R.id.ll_shuffle);
+        llTitle = findViewById(R.id.ll_title);
+        llWebView = findViewById(R.id.ll_webview);
         tvTitle = findViewById(R.id.tv_title);
 
         bPlayPause.setTypeface(Typeface.createFromAsset(getAssets(), "Player.ttf"));
@@ -271,6 +273,13 @@ public class MainActivity extends AppCompatActivity {
                     public void onReceiveValue(String value) {
                     }
                 });
+            }
+        });
+        bReload.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                bReload.setVisibility(View.GONE);
+                player.reload();
             }
         });
         findViewById(R.id.tv_shuffle).setOnClickListener(new View.OnClickListener() {
@@ -287,7 +296,7 @@ public class MainActivity extends AppCompatActivity {
                 llShuffle.setVisibility(View.GONE);
             }
         });
-        ll.setOnClickListener(new View.OnClickListener() {
+        llTitle.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 if (isPlaying) {
@@ -400,6 +409,12 @@ public class MainActivity extends AppCompatActivity {
                 view.getSettings().setBlockNetworkImage(true);
                 super.onPageStarted(view, url, favicon);
             }
+
+            @Override
+            public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+             // bReload.setVisibility(View.VISIBLE);
+                super.onReceivedError(view, request, error);
+            }
         });
         player.setWebChromeClient(new WebChromeClient() {
             @Override
@@ -420,6 +435,7 @@ public class MainActivity extends AppCompatActivity {
                 title = title.replace(" - YouTube", "");
                 tvTitle.setText(title);
                 sendNotification(title);
+                bReload.setVisibility(title.equals("網頁無法使用") ? View.VISIBLE : View.GONE);
                 super.onReceivedTitle(view, title);
             }
         });
@@ -452,6 +468,8 @@ public class MainActivity extends AppCompatActivity {
          * rv.setTextViewText(R.id.tv_title, "YouTube Music");
          */
         IntentFilter intentFilter = new IntentFilter();
+        intentFilter.addAction("com.mister_chan.ytmusic.lyrics");
+        intentFilter.addAction("com.mister_chan.ytmusic.next");
         intentFilter.addAction("com.mister_chan.ytmusic.play");
         intentFilter.addAction("com.mister_chan.ytmusic.pause");
         intentFilter.addAction("com.mister_chan.ytmusic.lyrics");
@@ -459,8 +477,15 @@ public class MainActivity extends AppCompatActivity {
         intent.setAction("com.mister_chan.ytmusic.lyrics");
         PendingIntent pendingIntent = PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
         lyricsAction = new NotificationCompat.Action.Builder(R.drawable.ic_lyrics, "Lyrics", pendingIntent).build();
+        intent = new Intent();
+        intent.setAction("com.mister_chan.ytmusic.next");
+        pendingIntent = PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
+        nextAction = new NotificationCompat.Action.Builder(R.drawable.ic_next, "Next", pendingIntent).build();
         registerReceiver(new NotificationReceiver(), intentFilter);
         sendNotification("YouTube Music");
+
+        wakeLock = ((PowerManager) getSystemService(POWER_SERVICE)).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK | PowerManager.ON_AFTER_RELEASE, "WakeLock");
+        wakeLock.acquire(7200000);
 
         timer = new Timer();
         timerTask = new LyricsTimerTask();
@@ -564,6 +589,7 @@ public class MainActivity extends AppCompatActivity {
         }
         Notification notification = new NotificationCompat.Builder(this, "channel")
                 .addAction(playPauseAction)
+                .addAction(nextAction)
                 .addAction(lyricsAction)
              // .setCustomContentView(rv)
                 .setContentText(contentText)
