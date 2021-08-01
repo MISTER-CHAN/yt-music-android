@@ -15,7 +15,11 @@ import android.graphics.PixelFormat;
 import android.graphics.Typeface;
 import android.os.Bundle;
 import android.os.PowerManager;
+import android.support.v4.media.MediaMetadataCompat;
+import android.support.v4.media.session.MediaSessionCompat;
+import android.support.v4.media.session.PlaybackStateCompat;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
@@ -34,6 +38,7 @@ import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.RemoteViews;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
@@ -59,7 +64,7 @@ import java.util.regex.Pattern;
 
 public class MainActivity extends AppCompatActivity {
 
-    private class MediaWebView extends WebView {
+    private static class MediaWebView extends WebView {
 
         public MediaWebView(Context context) {
             super(context);
@@ -87,7 +92,7 @@ public class MainActivity extends AppCompatActivity {
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
-                    player.evaluateJavascript("document.getElementById(\"movie_player\").getCurrentTime()", new ValueCallback<String>() {
+                    player.evaluateJavascript(PLAYER + ".getCurrentTime()", new ValueCallback<String>() {
                         @Override
                         public void onReceiveValue(String value) {
                             if (isNumeric(value)) {
@@ -202,8 +207,9 @@ public class MainActivity extends AppCompatActivity {
     private int playerState = 0;
     private LinearLayout llWebView, llShuffle, llTitle;
     private List<String> playlistVideos = new ArrayList<>();
+    private long duration = 0;
+    private MediaSessionCompat mediaSession;
     private NotificationCompat.Action lyricsAction, nextAction;
-    private RemoteViews rv;
     private final Skipping[] skippingBeginnings = new Skipping[] {
             new Skipping("l2nRYRiEY6Y", 4),
             new Skipping("wrczjnLqfZk", 28)
@@ -400,6 +406,14 @@ public class MainActivity extends AppCompatActivity {
                     playlistVideos = new ArrayList<>();
                     playlist = "";
                 }
+                player.evaluateJavascript(PLAYER + ".getDuration()", new ValueCallback<String>() {
+                    @Override
+                    public void onReceiveValue(String value) {
+                        if (!value.equals("null")) {
+                            duration = Long.parseLong(value);
+                        }
+                    }
+                });
                 player.loadUrl("javascript:" + PLAYER + ".unMute()");
                 super.onPageFinished(view, url);
             }
@@ -460,13 +474,15 @@ public class MainActivity extends AppCompatActivity {
         tvLyrics.setTypeface(Typeface.defaultFromStyle(Typeface.BOLD_ITALIC));
         windowManager.addView(tvLyrics, wmlp);
 
+        mediaSession = new MediaSessionCompat(this, "PlayService");
+        mediaSession.setMetadata(new MediaMetadataCompat.Builder()
+                .putString(MediaMetadataCompat.METADATA_KEY_TITLE, "YouTube Music")
+                .build()
+        );
+
         NotificationManager nm = (NotificationManager)getSystemService(NOTIFICATION_SERVICE);
         NotificationChannel nc = new NotificationChannel("channel", "Channel", NotificationManager.IMPORTANCE_LOW);
         nm.createNotificationChannel(nc);
-        /*
-         * rv = new RemoteViews(getPackageName(), R.layout.notification);
-         * rv.setTextViewText(R.id.tv_title, "YouTube Music");
-         */
         IntentFilter intentFilter = new IntentFilter();
         intentFilter.addAction("com.mister_chan.ytmusic.lyrics");
         intentFilter.addAction("com.mister_chan.ytmusic.next");
@@ -514,24 +530,20 @@ public class MainActivity extends AppCompatActivity {
     public void onStateChange(int data) {
         bPlayPause.setText(data == 1 /* playing */ ? "⏸" : "⏵");
         sendNotification(data);
-        switch (data) {
-            case 0: // ended
-                if (playlistVideos.size() > 1) {
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            if (isShuffled) {
-                                player.loadUrl(playlistVideos.get(0));
-                            }
-                            playlistVideos.remove(0);
+        if (data == 0 /* ended */) {
+            if (playlistVideos.size() > 1) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (isShuffled) {
+                            player.loadUrl(playlistVideos.get(0));
                         }
-                    });
-                } else {
-                    isPlaying = false;
-                }
-                break;
-            case 1:
-                break;
+                        playlistVideos.remove(0);
+                    }
+                });
+            } else {
+                isPlaying = false;
+            }
         }
     }
 
@@ -555,8 +567,6 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
             br.close();
-        } catch (UnsupportedEncodingException e) {
-            e.printStackTrace();
         } catch (FileNotFoundException e) {
             tvLyrics.setText("YouTube Music");
             e.printStackTrace();
@@ -587,15 +597,24 @@ public class MainActivity extends AppCompatActivity {
             PendingIntent pendingIntent = PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
             playPauseAction = new NotificationCompat.Action.Builder(R.drawable.ic_play, "Play", pendingIntent).build();
         }
+        mediaSession.setMetadata(new MediaMetadataCompat.Builder()
+                .putString(MediaMetadataCompat.METADATA_KEY_TITLE, title)
+                .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, duration * 1000)
+                .build()
+        );
+        mediaSession.setPlaybackState(new PlaybackStateCompat.Builder()
+                .setState(PlaybackStateCompat.STATE_PLAYING, (long) (beginningDuration * 1000), 1)
+                .setActions(PlaybackStateCompat.ACTION_SEEK_TO)
+                .build()
+        );
         Notification notification = new NotificationCompat.Builder(this, "channel")
                 .addAction(playPauseAction)
                 .addAction(nextAction)
                 .addAction(lyricsAction)
-             // .setCustomContentView(rv)
-                .setContentText(contentText)
                 .setOngoing(true)
                 .setSmallIcon(R.drawable.ic_launcher_foreground)
                 .setStyle(new androidx.media.app.NotificationCompat.MediaStyle()
+                        .setMediaSession(mediaSession.getSessionToken())
                         .setShowActionsInCompactView(0))
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .build();
