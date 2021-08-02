@@ -64,7 +64,7 @@ import java.util.regex.Pattern;
 
 public class MainActivity extends AppCompatActivity {
 
-    private static class MediaWebView extends WebView {
+    private class MediaWebView extends WebView {
 
         public MediaWebView(Context context) {
             super(context);
@@ -76,6 +76,12 @@ public class MainActivity extends AppCompatActivity {
 
         public MediaWebView(Context context, AttributeSet attrs, int defStyleAttr) {
             super(context, attrs, defStyleAttr);
+        }
+
+        @Override
+        public void onPause() {
+            resumeTimers();
+            MainActivity.this.onResume();
         }
 
         @Override
@@ -118,7 +124,7 @@ public class MainActivity extends AppCompatActivity {
                                                         "value.slice(1)",
                                                 new ValueCallback<String>() {
                                                     public void onReceiveValue(String value) {
-                                                        String[] hrefs = value.split(",");
+                                                        String[] hrefs = value.replace("\"", "").split(",");
                                                         playlistVideos.addAll(Arrays.asList(hrefs));
                                                         if (playlistVideos.size() > 1) {
                                                             shouldGetPlaylist = false;
@@ -200,6 +206,12 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private static final int PLAYER_STATE_UNSTARTED = -1,
+            PLAYER_STATE_ENDED = 0,
+            PLAYER_STATE_PLAYING = 1,
+            PLAYER_STATE_PAUSED = 2,
+            PLAYER_STATE_BUFFERING = 3,
+            PLAYER_STATE_CUED = 5;
     private static final String HOME = "https://m.youtube.com", PLAYER = "document.getElementById(\"movie_player\")";
     private boolean isPlaying = false, isShuffled = false, shouldGetPlaylist = false, shouldSkipBeginning = false;
     private Button bPlayPause, bReload;
@@ -231,7 +243,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private String isVideo(String url) {
-        Matcher m = Pattern.compile("(?<=watch\\?v=)[-0-9A-Z_a-z]+").matcher(url);
+        Matcher m = Pattern.compile("(?<=v=)[-0-9A-Z_a-z]+").matcher(url);
         if (m.find()) {
             return m.group();
         }
@@ -312,7 +324,7 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        webView = new MediaWebView(this);
+        webView = new WebView(this);
         player = new MediaWebView(this);
         initialWebView(webView);
         initialWebView(player);
@@ -410,7 +422,7 @@ public class MainActivity extends AppCompatActivity {
                     @Override
                     public void onReceiveValue(String value) {
                         if (!value.equals("null")) {
-                            duration = Long.parseLong(value);
+                            duration = (long) Float.parseFloat(value);
                         }
                     }
                 });
@@ -501,7 +513,7 @@ public class MainActivity extends AppCompatActivity {
         sendNotification("YouTube Music");
 
         wakeLock = ((PowerManager) getSystemService(POWER_SERVICE)).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK | PowerManager.ON_AFTER_RELEASE, "WakeLock");
-        wakeLock.acquire(7200000);
+        wakeLock.acquire();
 
         timer = new Timer();
         timerTask = new LyricsTimerTask();
@@ -526,11 +538,16 @@ public class MainActivity extends AppCompatActivity {
         return super.onKeyDown(keyCode, event);
     }
 
+    @Override
+    protected void onPause() {
+        super.onPause();
+    }
+
     @JavascriptInterface
     public void onStateChange(int data) {
-        bPlayPause.setText(data == 1 /* playing */ ? "⏸" : "⏵");
+        bPlayPause.setText(data == PLAYER_STATE_PLAYING ? "⏸" : "⏵");
         sendNotification(data);
-        if (data == 0 /* ended */) {
+        if (data == PLAYER_STATE_ENDED) {
             if (playlistVideos.size() > 1) {
                 runOnUiThread(new Runnable() {
                     @Override
@@ -588,7 +605,7 @@ public class MainActivity extends AppCompatActivity {
         this.playerState = playerState;
         Intent intent = new Intent();
         NotificationCompat.Action playPauseAction;
-        if (playerState == 1) {
+        if (playerState == PLAYER_STATE_PLAYING) {
             intent.setAction("com.mister_chan.ytmusic.pause");
             PendingIntent pendingIntent = PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
             playPauseAction = new NotificationCompat.Action.Builder(R.drawable.ic_pause, "Pause", pendingIntent).build();
@@ -603,7 +620,7 @@ public class MainActivity extends AppCompatActivity {
                 .build()
         );
         mediaSession.setPlaybackState(new PlaybackStateCompat.Builder()
-                .setState(PlaybackStateCompat.STATE_PLAYING, (long) (beginningDuration * 1000), 1)
+                .setState(PlaybackStateCompat.STATE_PLAYING, 0, 1)
                 .setActions(PlaybackStateCompat.ACTION_SEEK_TO)
                 .build()
         );
