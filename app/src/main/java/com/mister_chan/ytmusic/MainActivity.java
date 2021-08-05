@@ -1,10 +1,13 @@
 package com.mister_chan.ytmusic;
 
 import android.annotation.SuppressLint;
+import android.app.AlertDialog;
+import android.app.Dialog;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.app.Service;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -14,6 +17,7 @@ import android.graphics.Color;
 import android.graphics.PixelFormat;
 import android.graphics.Typeface;
 import android.os.Bundle;
+import android.os.IBinder;
 import android.os.PowerManager;
 import android.support.v4.media.MediaMetadataCompat;
 import android.support.v4.media.session.MediaSessionCompat;
@@ -64,41 +68,13 @@ import java.util.regex.Pattern;
 
 public class MainActivity extends AppCompatActivity {
 
-    private class MediaWebView extends WebView {
-
-        public MediaWebView(Context context) {
-            super(context);
-        }
-
-        public MediaWebView(Context context, AttributeSet attrs) {
-            super(context, attrs);
-        }
-
-        public MediaWebView(Context context, AttributeSet attrs, int defStyleAttr) {
-            super(context, attrs, defStyleAttr);
-        }
-
-        @Override
-        public void onPause() {
-            resumeTimers();
-            MainActivity.this.onResume();
-        }
-
-        @Override
-        protected void onWindowVisibilityChanged(int visibility) {
-            if (visibility != View.GONE) {
-                super.onWindowVisibilityChanged(View.VISIBLE);
-            }
-        }
-    }
-
     private class LyricsTimerTask extends TimerTask {
         @Override
         public void run() {
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
-                    player.evaluateJavascript(PLAYER + ".getCurrentTime()", new ValueCallback<String>() {
+                    player.evaluateJavascript("var player = " + PLAYER + "; if (player != null) player.getCurrentTime()", new ValueCallback<String>() {
                         @Override
                         public void onReceiveValue(String value) {
                             if (isNumeric(value)) {
@@ -178,7 +154,7 @@ public class MainActivity extends AppCompatActivity {
                 case "com.mister_chan.ytmusic.next":
                     player.loadUrl("javascript:" + PLAYER + ".seekTo(" + PLAYER + ".getDuration())");
                     break;
-                case "com.mister_chan.ytmusic.lyrics":
+                case "com.mister_chan.ytmusic.lyrics":/*
                     int visibility = tvLyrics.getVisibility();
                     switch (visibility) {
                         case View.VISIBLE:
@@ -187,11 +163,11 @@ public class MainActivity extends AppCompatActivity {
                             break;
                         case View.GONE:
                             timer = new Timer();
-                            timer.schedule(new LyricsTimerTask(), 1000, 100);
+                            timer.schedule(new MainActivity.LyricsTimerTask(), 1000, 100);
                             tvLyrics.setVisibility(View.VISIBLE);
                             break;
                     }
-                    break;
+                    break;*/
             }
         }
     }
@@ -212,15 +188,19 @@ public class MainActivity extends AppCompatActivity {
             PLAYER_STATE_PAUSED = 2,
             PLAYER_STATE_BUFFERING = 3,
             PLAYER_STATE_CUED = 5;
+
     private static final String HOME = "https://m.youtube.com", PLAYER = "document.getElementById(\"movie_player\")";
     private boolean isPlaying = false, isShuffled = false, shouldGetPlaylist = false, shouldSkipBeginning = false;
     private Button bPlayPause, bReload;
     private float beginningDuration = 0, endingDuration = 0;
-    private int playerState = 0;
+    int playerState = 0;
     private LinearLayout llWebView, llShuffle, llTitle;
     private List<String> playlistVideos = new ArrayList<>();
-    private long duration = 0;
+    long duration = 0;
+    private MediaService service;
     private MediaSessionCompat mediaSession;
+    private MediaWebView player;
+    private Notification notification;
     private NotificationCompat.Action lyricsAction, nextAction;
     private final Skipping[] skippingBeginnings = new Skipping[] {
             new Skipping("l2nRYRiEY6Y", 4),
@@ -229,13 +209,14 @@ public class MainActivity extends AppCompatActivity {
     private final Skipping[] skippingEndings = new Skipping[] {
             new Skipping("49tpIMDy9BE", 291)
     };
-    private String nowPlaying = "", playlist = "", title = "";
+    String title = "";
+    private String nowPlaying = "", playlist = "";
     private String[] lyrics;
     private TextView tvLyrics, tvTitle;
     private Timer timer;
     private TimerTask timerTask;
     private PowerManager.WakeLock wakeLock;
-    private WebView player, webView;
+    private WebView webView;
     private WindowManager windowManager;
 
     private boolean isNumeric(String s) {
@@ -258,14 +239,14 @@ public class MainActivity extends AppCompatActivity {
         lp.height = ViewGroup.LayoutParams.MATCH_PARENT;
         wv.setLayoutParams(lp);
         WebSettings ws = wv.getSettings();
+        ws.setAllowFileAccess(true);
+        ws.setAppCacheEnabled(true);
+        ws.setBlockNetworkImage(true);
+        ws.setCacheMode(WebSettings.LOAD_CACHE_ELSE_NETWORK);
+        ws.setDatabaseEnabled(true);
+        ws.setDomStorageEnabled(true);
         ws.setJavaScriptEnabled(true);
         ws.setRenderPriority(WebSettings.RenderPriority.HIGH);
-        ws.setBlockNetworkImage(true);
-        ws.setAppCacheEnabled(true);
-        ws.setDomStorageEnabled(true);
-        ws.setDatabaseEnabled(true);
-        ws.setAllowFileAccess(true);
-        ws.setCacheMode(WebSettings.LOAD_CACHE_ELSE_NETWORK);
         ws.setSupportMultipleWindows(true);
     }
 
@@ -328,6 +309,9 @@ public class MainActivity extends AppCompatActivity {
         player = new MediaWebView(this);
         initialWebView(webView);
         initialWebView(player);
+        WebSettings ws = player.getSettings();
+        ws.setMediaPlaybackRequiresUserGesture(false);
+        ws.setUserAgentString("Chrome");
         player.addJavascriptInterface(this, "MainActivity");
         webView.setWebViewClient(new WebViewClient() {
             @Override
@@ -336,7 +320,7 @@ public class MainActivity extends AppCompatActivity {
                 if (v != null) {
                     view.goBack();
                     readLyrics(v);
-                    player.loadUrl(url.replace("&pbj=1", ""));
+                    player.loadUrl(url.replace("&pbj=1", "").replace("://m.", "://www."));
                     nowPlaying = v;
                     webView.setVisibility(View.GONE);
                     player.setVisibility(View.VISIBLE);
@@ -404,7 +388,7 @@ public class MainActivity extends AppCompatActivity {
                     if (nowPlaying.equals(s.v)) {
                         endingDuration = s.when;
                     }
-                }
+                }/*
                 Matcher matcherList = Pattern.compile("(?<=list=)[-0-9A-Z_a-z]+").matcher(url);
                 if (matcherList.find()) {
                     String group = matcherList.group();
@@ -417,7 +401,7 @@ public class MainActivity extends AppCompatActivity {
                     llShuffle.setVisibility(View.GONE);
                     playlistVideos = new ArrayList<>();
                     playlist = "";
-                }
+                }*/
                 player.evaluateJavascript(PLAYER + ".getDuration()", new ValueCallback<String>() {
                     @Override
                     public void onReceiveValue(String value) {
@@ -446,22 +430,24 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onReceivedTitle(WebView view, String title) {
                 String url = view.getUrl();
-                String v = isVideo(url);
-                if (v == null) {
-                    view.goBack();
-                    webView.loadUrl(url);
-                    shouldSkipBeginning = true;
-                    player.setVisibility(View.GONE);
-                    webView.setVisibility(View.VISIBLE);
-                } else if (!v.equals(nowPlaying)) {
-                    readLyrics(v);
-                    nowPlaying = v;
-                    isPlaying = true;
+                if (url.startsWith("https://www.youtube.com")) {
+                    String v = isVideo(url);
+                    if (v == null) {
+                        view.goBack();
+                        webView.loadUrl(url);
+                        shouldSkipBeginning = true;
+                        player.setVisibility(View.GONE);
+                        webView.setVisibility(View.VISIBLE);
+                    } else if (!v.equals(nowPlaying)) {
+                        readLyrics(v);
+                        nowPlaying = v;
+                        isPlaying = true;
+                    }
+                    title = title.replace(" - YouTube", "");
+                    tvTitle.setText(title);
+                    sendNotification(title);
+                    bReload.setVisibility(title.equals("網頁無法使用") ? View.VISIBLE : View.GONE);
                 }
-                title = title.replace(" - YouTube", "");
-                tvTitle.setText(title);
-                sendNotification(title);
-                bReload.setVisibility(title.equals("網頁無法使用") ? View.VISIBLE : View.GONE);
                 super.onReceivedTitle(view, title);
             }
         });
@@ -486,13 +472,7 @@ public class MainActivity extends AppCompatActivity {
         tvLyrics.setTypeface(Typeface.defaultFromStyle(Typeface.BOLD_ITALIC));
         windowManager.addView(tvLyrics, wmlp);
 
-        mediaSession = new MediaSessionCompat(this, "PlayService");
-        mediaSession.setMetadata(new MediaMetadataCompat.Builder()
-                .putString(MediaMetadataCompat.METADATA_KEY_TITLE, "YouTube Music")
-                .build()
-        );
-
-        NotificationManager nm = (NotificationManager)getSystemService(NOTIFICATION_SERVICE);
+        NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         NotificationChannel nc = new NotificationChannel("channel", "Channel", NotificationManager.IMPORTANCE_LOW);
         nm.createNotificationChannel(nc);
         IntentFilter intentFilter = new IntentFilter();
@@ -509,11 +489,20 @@ public class MainActivity extends AppCompatActivity {
         intent.setAction("com.mister_chan.ytmusic.next");
         pendingIntent = PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
         nextAction = new NotificationCompat.Action.Builder(R.drawable.ic_next, "Next", pendingIntent).build();
-        registerReceiver(new NotificationReceiver(), intentFilter);
-        sendNotification("YouTube Music");
+        registerReceiver(new MainActivity.NotificationReceiver(), intentFilter);
+        mediaSession = new MediaSessionCompat(this, "PlayService");
+        mediaSession.setMetadata(new MediaMetadataCompat.Builder()
+                .putString(MediaMetadataCompat.METADATA_KEY_TITLE, "YouTube Music")
+                .build()
+        );
 
-        wakeLock = ((PowerManager) getSystemService(POWER_SERVICE)).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK | PowerManager.ON_AFTER_RELEASE, "WakeLock");
-        wakeLock.acquire();
+
+        sendNotification("YouTube Music", 0);
+        service = new MediaService(notification);
+        startService(new Intent(this, MediaService.class));
+
+        setShowWhenLocked(true);
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         timer = new Timer();
         timerTask = new LyricsTimerTask();
@@ -539,8 +528,22 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
+    protected void onStart() {
+        super.onStart();
+        wakeLock = ((PowerManager) getSystemService(Context.POWER_SERVICE)).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, getClass().getCanonicalName());
+        wakeLock.acquire();
+    }
+
+    @Override
     protected void onPause() {
         super.onPause();
+        wakeLock.acquire();
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        wakeLock.acquire();
     }
 
     @JavascriptInterface
@@ -600,12 +603,12 @@ public class MainActivity extends AppCompatActivity {
         sendNotification(title, playerState);
     }
 
-    private void sendNotification(String contentText, int playerState) {
+    void sendNotification(String contentText, int playerState) {
         title = contentText;
         this.playerState = playerState;
         Intent intent = new Intent();
         NotificationCompat.Action playPauseAction;
-        if (playerState == PLAYER_STATE_PLAYING) {
+        if (playerState == 1) {
             intent.setAction("com.mister_chan.ytmusic.pause");
             PendingIntent pendingIntent = PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
             playPauseAction = new NotificationCompat.Action.Builder(R.drawable.ic_pause, "Pause", pendingIntent).build();
@@ -624,7 +627,7 @@ public class MainActivity extends AppCompatActivity {
                 .setActions(PlaybackStateCompat.ACTION_SEEK_TO)
                 .build()
         );
-        Notification notification = new NotificationCompat.Builder(this, "channel")
+        notification = new NotificationCompat.Builder(this, "channel")
                 .addAction(playPauseAction)
                 .addAction(nextAction)
                 .addAction(lyricsAction)
@@ -636,6 +639,6 @@ public class MainActivity extends AppCompatActivity {
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .build();
         notification.flags |= Notification.FLAG_NO_CLEAR;
-        NotificationManagerCompat.from(this).notify(0, notification);
+        NotificationManagerCompat.from(this).notify(1, notification);
     }
 }
