@@ -1,7 +1,6 @@
 package com.mister_chan.ytmusic;
 
 import android.annotation.SuppressLint;
-import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
@@ -17,10 +16,8 @@ import android.graphics.PixelFormat;
 import android.graphics.Typeface;
 import android.os.Bundle;
 import android.os.IBinder;
-import android.os.PowerManager;
 import android.support.v4.media.MediaMetadataCompat;
 import android.support.v4.media.session.MediaSessionCompat;
-import android.util.Log;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
@@ -50,10 +47,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.regex.Matcher;
@@ -79,50 +72,39 @@ public class MainActivity extends AppCompatActivity {
                                 float f = Float.parseFloat(value);
                                 if (f > 0) {
 
-                                    if (isntVideoStarted) {
-                                        isntVideoStarted = false;
-
-                                        // Add on-state-change listener
+                                    // Should-dos
+                                    if (shouldAddOnStateChangeListener) {
+                                        shouldAddOnStateChangeListener = false;
                                         onStateChange(PLAYER_STATE_PLAYING);
                                         player.loadUrl("javascript:" +
-                                                "player.addEventListener(\"onStateChange\", function (data) {" +
-                                                "    MainActivity.onStateChange(data)" +
-                                                "})");
-
-                                        // Get beginning duration and skip beginning
-                                        for (Skipping s : skippingBeginnings) {
-                                            if (nowPlaying.equals(s.v)) {
-                                                beginningDuration = s.when;
-                                            }
-                                        }
+                                                        "player.addEventListener(\"onStateChange\", function (data) {" +
+                                                        "    MainActivity.onStateChange(data)" +
+                                                        "})");
+                                    }
+                                    if (shouldSkipBeginning) {
+                                        shouldSkipBeginning = false;
                                         if (f < beginningDuration) {
                                             player.loadUrl("javascript:" +
                                                     "player.seekTo(" + beginningDuration + ")");
                                         }
-
-                                        // Get ending duration
-                                        endingDuration = 0;
-                                        for (Skipping s : skippingEndings) {
-                                            if (nowPlaying.equals(s.v)) {
-                                                endingDuration = s.when;
-                                            }
-                                        }
-
-                                        // Get video duration
+                                    }
+                                    if (shouldGetDuration) {
                                         player.evaluateJavascript("player.getDuration()", new ValueCallback<String>() {
                                             @Override
                                             public void onReceiveValue(String value) {
                                                 if (!value.equals("null")) {
+                                                    shouldGetDuration = false;
                                                     duration = (long) Float.parseFloat(value);
+                                                    sendNotification();
                                                 }
                                             }
                                         });
-
-                                        // Un-mute video
+                                    }
+                                    if (shouldUnmuteVideo) {
+                                        shouldUnmuteVideo = false;
                                         player.loadUrl("javascript:" +
                                                 "player.unMute()");
                                     }
-
                                     beginningDuration = f;
 
                                     // Show lyrics
@@ -198,7 +180,7 @@ public class MainActivity extends AppCompatActivity {
             PLAYER_STATE_CUED = 5;
 
     private static final String HOME = "https://m.youtube.com", PLAYER = "document.getElementById(\"movie_player\")";
-    private boolean isPlaying = false, isntVideoStarted = true;
+    private boolean isPlaying = false, shouldAddOnStateChangeListener = false, shouldGetDuration = false, shouldSkipBeginning = false, shouldUnmuteVideo = false;
     private Button bPlayPause, bReload;
     private float beginningDuration = 0, endingDuration = 0;
     int playerState = 0;
@@ -328,12 +310,12 @@ public class MainActivity extends AppCompatActivity {
                 String v = isVideo(url);
                 if (v != null) {
                     view.goBack();
-                    readLyrics(v);
                     player.loadUrl(url.replace("&pbj=1", "").replace("://m.", "://www."));
-                    nowPlaying = v;
+                    beginningDuration = 0;
+                    prepareNewVideo(v);
+                    prepareTodoList();
                     webView.setVisibility(View.GONE);
                     player.setVisibility(View.VISIBLE);
-                    isPlaying = true;
                 }
                 super.onLoadResource(view, url);
             }
@@ -403,15 +385,13 @@ public class MainActivity extends AppCompatActivity {
                     if (v == null) { // When loading feed
                         view.goBack();
                         webView.loadUrl(url);
-                        isntVideoStarted = true;
                         player.setVisibility(View.GONE);
                         webView.setVisibility(View.VISIBLE);
                     } else if (!v.equals(nowPlaying)) { // When loading another video
                         beginningDuration = 0;
-                        readLyrics(v);
-                        nowPlaying = v;
-                        isPlaying = true;
+                        prepareNewVideo(v);
                     }
+                    prepareTodoList();
                     title = title.replace(" - YouTube", "");
                     tvTitle.setText(title);
                     sendNotification(title);
@@ -517,9 +497,31 @@ public class MainActivity extends AppCompatActivity {
     public void onStateChange(int data) {
         bPlayPause.setText(data == PLAYER_STATE_PLAYING ? "⏸" : "⏵");
         sendNotification(data);
-        if (data == PLAYER_STATE_ENDED) {
-            isPlaying = false;
+    }
+
+    private void prepareNewVideo(String v) {
+        readLyrics(v);
+        nowPlaying = v;
+        isPlaying = true;
+
+        for (Skipping s : skippingBeginnings) {
+            if (nowPlaying.equals(s.v)) {
+                beginningDuration = s.when;
+            }
         }
+        endingDuration = 0;
+        for (Skipping s : skippingEndings) {
+            if (nowPlaying.equals(s.v)) {
+                endingDuration = s.when;
+            }
+        }
+    }
+
+    private void prepareTodoList() {
+        shouldAddOnStateChangeListener = true;
+        shouldGetDuration = true;
+        shouldSkipBeginning = true;
+        shouldUnmuteVideo = true;
     }
 
     private void readLyrics(String v) {
@@ -548,6 +550,10 @@ public class MainActivity extends AppCompatActivity {
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    private void sendNotification() {
+        notificationService.sendNotification(this);
     }
 
     private void sendNotification(int playerState) {
