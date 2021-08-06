@@ -67,33 +67,75 @@ public class MainActivity extends AppCompatActivity {
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
-                    player.evaluateJavascript("var player = " + PLAYER + "; if (player != null) player.getCurrentTime()", new ValueCallback<String>() {
+                    player.evaluateJavascript(
+                            "var player = " + PLAYER + ";" +
+                                    "if (player != null)" +
+                                    "    player.getCurrentTime()",
+                            new ValueCallback<String>() {
                         @Override
                         public void onReceiveValue(String value) {
+                            // value: current time in seconds
                             if (isNumeric(value)) {
                                 float f = Float.parseFloat(value);
                                 if (f > 0) {
+
+                                    if (isntVideoStarted) {
+                                        isntVideoStarted = false;
+
+                                        // Add on-state-change listener
+                                        onStateChange(PLAYER_STATE_PLAYING);
+                                        player.loadUrl("javascript:" +
+                                                "player.addEventListener(\"onStateChange\", function (data) {" +
+                                                "    MainActivity.onStateChange(data)" +
+                                                "})");
+
+                                        // Get beginning duration and skip beginning
+                                        for (Skipping s : skippingBeginnings) {
+                                            if (nowPlaying.equals(s.v)) {
+                                                beginningDuration = s.when;
+                                            }
+                                        }
+                                        if (f < beginningDuration) {
+                                            player.loadUrl("javascript:" +
+                                                    "player.seekTo(" + beginningDuration + ")");
+                                        }
+
+                                        // Get ending duration
+                                        endingDuration = 0;
+                                        for (Skipping s : skippingEndings) {
+                                            if (nowPlaying.equals(s.v)) {
+                                                endingDuration = s.when;
+                                            }
+                                        }
+
+                                        // Get video duration
+                                        player.evaluateJavascript("player.getDuration()", new ValueCallback<String>() {
+                                            @Override
+                                            public void onReceiveValue(String value) {
+                                                if (!value.equals("null")) {
+                                                    duration = (long) Float.parseFloat(value);
+                                                }
+                                            }
+                                        });
+
+                                        // Un-mute video
+                                        player.loadUrl("javascript:" +
+                                                "player.unMute()");
+                                    }
+
+                                    beginningDuration = f;
+
+                                    // Show lyrics
                                     int centisec = (int) (f * 100) * 20 / 1000 * 1000 / 20;
                                     String lrc = lyrics[centisec];
                                     if (lrc != null) {
                                         tvLyrics.setText(lrc);
                                     }
-                                    if (shouldSkipBeginning) {
-                                        if (f < beginningDuration) {
-                                            player.evaluateJavascript(PLAYER + ".seekTo(" + beginningDuration + ")", new ValueCallback<String>() {
-                                                @Override
-                                                public void onReceiveValue(String value) {
-                                                }
-                                            });
-                                        } else {
-                                            shouldSkipBeginning = false;
-                                        }
-                                    } else {
-                                        beginningDuration = f;
-                                    }
+
+                                    // Skip ending
                                     if (endingDuration > 0) {
                                         if (f >= endingDuration) {
-                                            player.evaluateJavascript("var player = " + PLAYER + "; player.seekTo(player.getDuration())", new ValueCallback<String>() {
+                                            player.evaluateJavascript("player.seekTo(player.getDuration())", new ValueCallback<String>() {
                                                 @Override
                                                 public void onReceiveValue(String value) {
                                                 }
@@ -156,7 +198,7 @@ public class MainActivity extends AppCompatActivity {
             PLAYER_STATE_CUED = 5;
 
     private static final String HOME = "https://m.youtube.com", PLAYER = "document.getElementById(\"movie_player\")";
-    private boolean isPlaying = false, shouldSkipBeginning = false;
+    private boolean isPlaying = false, isntVideoStarted = true;
     private Button bPlayPause, bReload;
     private float beginningDuration = 0, endingDuration = 0;
     int playerState = 0;
@@ -239,15 +281,19 @@ public class MainActivity extends AppCompatActivity {
         llWebView = findViewById(R.id.ll_webview);
         tvTitle = findViewById(R.id.tv_title);
 
+        // Initial views
         bPlayPause.setTypeface(Typeface.createFromAsset(getAssets(), "Player.ttf"));
         bPlayPause.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                player.evaluateJavascript("var player = " + PLAYER + "; if (player.getPlayerState() == 1) player.pauseVideo(); else player.playVideo()", new ValueCallback<String>() {
-                    @Override
-                    public void onReceiveValue(String value) {
-                    }
-                });
+                player.loadUrl("javascript:" +
+                        "var player = " + PLAYER + ";" +
+                        "if (player != null) {" +
+                        "    if (player.getPlayerState() == 1)" +
+                        "        player.pauseVideo();" +
+                        "    else" +
+                        "        player.playVideo()" +
+                        "}");
             }
         });
         bReload.setOnClickListener(new View.OnClickListener() {
@@ -267,6 +313,7 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+        // Initial WebViews
         webView = new WebView(this);
         player = new MediaWebView(this);
         initialWebView(webView);
@@ -332,34 +379,6 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 view.getSettings().setBlockNetworkImage(false);
-                player.evaluateJavascript(PLAYER + ".addEventListener(\"onStateChange\", function (data) { MainActivity.onStateChange(data) })", new ValueCallback<String>() {
-                    @Override
-                    public void onReceiveValue(String value) {
-                    }
-                });
-                if (!shouldSkipBeginning) {
-                    for (Skipping s : skippingBeginnings) {
-                        if (nowPlaying.equals(s.v)) {
-                            beginningDuration = s.when;
-                            shouldSkipBeginning = true;
-                        }
-                    }
-                }
-                endingDuration = 0;
-                for (Skipping s : skippingEndings) {
-                    if (nowPlaying.equals(s.v)) {
-                        endingDuration = s.when;
-                    }
-                }
-                player.evaluateJavascript(PLAYER + ".getDuration()", new ValueCallback<String>() {
-                    @Override
-                    public void onReceiveValue(String value) {
-                        if (!value.equals("null")) {
-                            duration = (long) Float.parseFloat(value);
-                        }
-                    }
-                });
-                player.loadUrl("javascript:" + PLAYER + ".unMute()");
                 super.onPageFinished(view, url);
             }
 
@@ -381,13 +400,14 @@ public class MainActivity extends AppCompatActivity {
                 String url = view.getUrl();
                 if (url.startsWith("https://www.youtube.com")) {
                     String v = isVideo(url);
-                    if (v == null) {
+                    if (v == null) { // When loading feed
                         view.goBack();
                         webView.loadUrl(url);
-                        shouldSkipBeginning = true;
+                        isntVideoStarted = true;
                         player.setVisibility(View.GONE);
                         webView.setVisibility(View.VISIBLE);
-                    } else if (!v.equals(nowPlaying)) {
+                    } else if (!v.equals(nowPlaying)) { // When loading another video
+                        beginningDuration = 0;
                         readLyrics(v);
                         nowPlaying = v;
                         isPlaying = true;
@@ -403,6 +423,7 @@ public class MainActivity extends AppCompatActivity {
         player.setVisibility(View.GONE);
         webView.loadUrl(HOME);
 
+        // Initial lyrics window
         windowManager = (WindowManager)getSystemService(WINDOW_SERVICE);
         WindowManager.LayoutParams wmlp = new WindowManager.LayoutParams();
         wmlp.width = WindowManager.LayoutParams.MATCH_PARENT;
@@ -421,6 +442,7 @@ public class MainActivity extends AppCompatActivity {
         tvLyrics.setTypeface(Typeface.defaultFromStyle(Typeface.BOLD_ITALIC));
         windowManager.addView(tvLyrics, wmlp);
 
+        // Initial notification
         NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         NotificationChannel nc = new NotificationChannel("channel", "Channel", NotificationManager.IMPORTANCE_LOW);
         nm.createNotificationChannel(nc);
@@ -453,13 +475,14 @@ public class MainActivity extends AppCompatActivity {
                 .putString(MediaMetadataCompat.METADATA_KEY_TITLE, "YouTube Music")
                 .build()
         );
-
         Intent notificationIntent = new Intent(this, NotificationService.class);
         bindService(notificationIntent, connection, Context.BIND_AUTO_CREATE);
 
+        // [Unfinished] Show when screen locked
         setShowWhenLocked(true);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
+        // Start timer
         timer = new Timer();
         timerTask = new LyricsTimerTask();
         timer.schedule(timerTask, 1000, 100);
@@ -469,6 +492,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onDestroy() {
         stopService(new Intent(this, NotificationService.class));
         super.onDestroy();
+        android.os.Process.killProcess(android.os.Process.myPid());
     }
 
     @Override
