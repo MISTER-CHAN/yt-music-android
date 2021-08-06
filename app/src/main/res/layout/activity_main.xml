@@ -37,29 +37,6 @@
             android:textSize="24sp"
             android:visibility="gone"
             style="?android:attr/buttonBarButtonStyle" />
-        <LinearLayout
-            android:id="@+id/ll_shuffle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:visibility="gone">
-            <TextView
-                android:id="@+id/tv_shuffle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:padding="8dp"
-                android:text="⤭"
-                android:textColor="@color/white"
-                android:textSize="24sp" />
-            <TextView
-                android:id="@+id/tv_dont_shuffle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:padding="8dp"
-                android:text="⥤"
-                android:textColor="@color/white"
-                android:textSize="24sp" />
-        </LinearLayout>
         <Button
             android:id="@+id/b_play_pause"
             android:layout_width="32dp"

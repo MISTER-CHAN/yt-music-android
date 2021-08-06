@@ -1,17 +1,16 @@
 package com.mister_chan.ytmusic;
 
 import android.annotation.SuppressLint;
-import android.app.AlertDialog;
-import android.app.Dialog;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
-import android.app.Service;
 import android.content.BroadcastReceiver;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.ServiceConnection;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.PixelFormat;
@@ -21,8 +20,6 @@ import android.os.IBinder;
 import android.os.PowerManager;
 import android.support.v4.media.MediaMetadataCompat;
 import android.support.v4.media.session.MediaSessionCompat;
-import android.support.v4.media.session.PlaybackStateCompat;
-import android.util.AttributeSet;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.KeyEvent;
@@ -40,14 +37,11 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Button;
 import android.widget.LinearLayout;
-import android.widget.RemoteViews;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.NotificationCompat;
-import androidx.core.app.NotificationManagerCompat;
 
 import java.io.BufferedReader;
 import java.io.FileInputStream;
@@ -55,7 +49,6 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.UnsupportedEncodingException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -84,30 +77,6 @@ public class MainActivity extends AppCompatActivity {
                                     String lrc = lyrics[centisec];
                                     if (lrc != null) {
                                         tvLyrics.setText(lrc);
-                                    }
-                                    if (shouldGetPlaylist) {
-                                        llShuffle.setVisibility(View.VISIBLE);
-                                        player.evaluateJavascript(
-                                                "  var elements = document.getElementsByClassName(\"compact-media-item-metadata-content\"), value = \"\";" +
-                                                        "for (var i = 0; i < elements.length; i++) {" +
-                                                        "    var href = elements[i].href, r = /(?<=v=)[-0-9A-Z_a-z]+?/;" +
-                                                        "    if (r.test(href)) {" +
-                                                        "        if (href.match(r)[0] != \"" + nowPlaying + "\") {" +
-                                                        "            value += \",\" + href" +
-                                                        "        }" +
-                                                        "    }" +
-                                                        "}" +
-                                                        "value.slice(1)",
-                                                new ValueCallback<String>() {
-                                                    public void onReceiveValue(String value) {
-                                                        String[] hrefs = value.replace("\"", "").split(",");
-                                                        playlistVideos.addAll(Arrays.asList(hrefs));
-                                                        if (playlistVideos.size() > 1) {
-                                                            shouldGetPlaylist = false;
-                                                            isShuffled = false;
-                                                        }
-                                                    }
-                                                });
                                     }
                                     if (shouldSkipBeginning) {
                                         if (f < beginningDuration) {
@@ -154,20 +123,17 @@ public class MainActivity extends AppCompatActivity {
                 case "com.mister_chan.ytmusic.next":
                     player.loadUrl("javascript:" + PLAYER + ".seekTo(" + PLAYER + ".getDuration())");
                     break;
-                case "com.mister_chan.ytmusic.lyrics":/*
+                case "com.mister_chan.ytmusic.lyrics":
                     int visibility = tvLyrics.getVisibility();
                     switch (visibility) {
                         case View.VISIBLE:
-                            timer.cancel();
                             tvLyrics.setVisibility(View.GONE);
                             break;
                         case View.GONE:
-                            timer = new Timer();
-                            timer.schedule(new MainActivity.LyricsTimerTask(), 1000, 100);
                             tvLyrics.setVisibility(View.VISIBLE);
                             break;
                     }
-                    break;*/
+                    break;
             }
         }
     }
@@ -190,18 +156,30 @@ public class MainActivity extends AppCompatActivity {
             PLAYER_STATE_CUED = 5;
 
     private static final String HOME = "https://m.youtube.com", PLAYER = "document.getElementById(\"movie_player\")";
-    private boolean isPlaying = false, isShuffled = false, shouldGetPlaylist = false, shouldSkipBeginning = false;
+    private boolean isPlaying = false, shouldSkipBeginning = false;
     private Button bPlayPause, bReload;
     private float beginningDuration = 0, endingDuration = 0;
     int playerState = 0;
-    private LinearLayout llWebView, llShuffle, llTitle;
-    private List<String> playlistVideos = new ArrayList<>();
+    private LinearLayout llWebView, llTitle;
     long duration = 0;
-    private MediaService service;
-    private MediaSessionCompat mediaSession;
+    MediaSessionCompat mediaSession;
     private MediaWebView player;
-    private Notification notification;
-    private NotificationCompat.Action lyricsAction, nextAction;
+    NotificationCompat.Action lyricsAction, nextAction;
+    private NotificationService notificationService;
+    private final ServiceConnection connection = new ServiceConnection() {
+        @Override
+        public void onServiceConnected(ComponentName name, IBinder service) {
+            NotificationService.NotificationBinder binder = (NotificationService.NotificationBinder) service;
+            notificationService = binder.getService();
+            sendNotification("YouTube Music", 0);
+            binder.startForeground();
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName name) {
+
+        }
+    };
     private final Skipping[] skippingBeginnings = new Skipping[] {
             new Skipping("l2nRYRiEY6Y", 4),
             new Skipping("wrczjnLqfZk", 28)
@@ -210,12 +188,11 @@ public class MainActivity extends AppCompatActivity {
             new Skipping("49tpIMDy9BE", 291)
     };
     String title = "";
-    private String nowPlaying = "", playlist = "";
+    private String nowPlaying = "";
     private String[] lyrics;
     private TextView tvLyrics, tvTitle;
     private Timer timer;
     private TimerTask timerTask;
-    private PowerManager.WakeLock wakeLock;
     private WebView webView;
     private WindowManager windowManager;
 
@@ -258,7 +235,6 @@ public class MainActivity extends AppCompatActivity {
 
         bPlayPause = findViewById(R.id.b_play_pause);
         bReload = findViewById(R.id.b_reload);
-        llShuffle = findViewById(R.id.ll_shuffle);
         llTitle = findViewById(R.id.ll_title);
         llWebView = findViewById(R.id.ll_webview);
         tvTitle = findViewById(R.id.tv_title);
@@ -279,20 +255,6 @@ public class MainActivity extends AppCompatActivity {
             public void onClick(View v) {
                 bReload.setVisibility(View.GONE);
                 player.reload();
-            }
-        });
-        findViewById(R.id.tv_shuffle).setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                llShuffle.setVisibility(View.GONE);
-                Collections.shuffle(playlistVideos);
-                isShuffled = true;
-            }
-        });
-        findViewById(R.id.tv_dont_shuffle).setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                llShuffle.setVisibility(View.GONE);
             }
         });
         llTitle.setOnClickListener(new View.OnClickListener() {
@@ -388,20 +350,7 @@ public class MainActivity extends AppCompatActivity {
                     if (nowPlaying.equals(s.v)) {
                         endingDuration = s.when;
                     }
-                }/*
-                Matcher matcherList = Pattern.compile("(?<=list=)[-0-9A-Z_a-z]+").matcher(url);
-                if (matcherList.find()) {
-                    String group = matcherList.group();
-                    if (!group.equals(playlist)) {
-                        playlist = group;
-                        playlistVideos = new ArrayList<>();
-                        shouldGetPlaylist = true;
-                    }
-                } else {
-                    llShuffle.setVisibility(View.GONE);
-                    playlistVideos = new ArrayList<>();
-                    playlist = "";
-                }*/
+                }
                 player.evaluateJavascript(PLAYER + ".getDuration()", new ValueCallback<String>() {
                     @Override
                     public void onReceiveValue(String value) {
@@ -480,15 +429,24 @@ public class MainActivity extends AppCompatActivity {
         intentFilter.addAction("com.mister_chan.ytmusic.next");
         intentFilter.addAction("com.mister_chan.ytmusic.play");
         intentFilter.addAction("com.mister_chan.ytmusic.pause");
-        intentFilter.addAction("com.mister_chan.ytmusic.lyrics");
-        Intent intent = new Intent();
-        intent.setAction("com.mister_chan.ytmusic.lyrics");
-        PendingIntent pendingIntent = PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
-        lyricsAction = new NotificationCompat.Action.Builder(R.drawable.ic_lyrics, "Lyrics", pendingIntent).build();
-        intent = new Intent();
-        intent.setAction("com.mister_chan.ytmusic.next");
-        pendingIntent = PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
-        nextAction = new NotificationCompat.Action.Builder(R.drawable.ic_next, "Next", pendingIntent).build();
+        lyricsAction = new NotificationCompat.Action.Builder(
+                R.drawable.ic_lyrics,
+                "Lyrics",
+                PendingIntent.getBroadcast(
+                        this,
+                        0,
+                        new Intent("com.mister_chan.ytmusic.lyrics"),
+                        PendingIntent.FLAG_UPDATE_CURRENT))
+                .build();
+        nextAction = new NotificationCompat.Action.Builder(
+                R.drawable.ic_next,
+                "Next",
+                PendingIntent.getBroadcast(
+                        this,
+                        0,
+                        new Intent("com.mister_chan.ytmusic.next"),
+                        PendingIntent.FLAG_UPDATE_CURRENT))
+                .build();
         registerReceiver(new MainActivity.NotificationReceiver(), intentFilter);
         mediaSession = new MediaSessionCompat(this, "PlayService");
         mediaSession.setMetadata(new MediaMetadataCompat.Builder()
@@ -496,10 +454,8 @@ public class MainActivity extends AppCompatActivity {
                 .build()
         );
 
-
-        sendNotification("YouTube Music", 0);
-        service = new MediaService(notification);
-        startService(new Intent(this, MediaService.class));
+        Intent notificationIntent = new Intent(this, NotificationService.class);
+        bindService(notificationIntent, connection, Context.BIND_AUTO_CREATE);
 
         setShowWhenLocked(true);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -507,6 +463,12 @@ public class MainActivity extends AppCompatActivity {
         timer = new Timer();
         timerTask = new LyricsTimerTask();
         timer.schedule(timerTask, 1000, 100);
+    }
+
+    @Override
+    protected void onDestroy() {
+        stopService(new Intent(this, NotificationService.class));
+        super.onDestroy();
     }
 
     @Override
@@ -527,43 +489,12 @@ public class MainActivity extends AppCompatActivity {
         return super.onKeyDown(keyCode, event);
     }
 
-    @Override
-    protected void onStart() {
-        super.onStart();
-        wakeLock = ((PowerManager) getSystemService(Context.POWER_SERVICE)).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, getClass().getCanonicalName());
-        wakeLock.acquire();
-    }
-
-    @Override
-    protected void onPause() {
-        super.onPause();
-        wakeLock.acquire();
-    }
-
-    @Override
-    protected void onStop() {
-        super.onStop();
-        wakeLock.acquire();
-    }
-
     @JavascriptInterface
     public void onStateChange(int data) {
         bPlayPause.setText(data == PLAYER_STATE_PLAYING ? "⏸" : "⏵");
         sendNotification(data);
         if (data == PLAYER_STATE_ENDED) {
-            if (playlistVideos.size() > 1) {
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        if (isShuffled) {
-                            player.loadUrl(playlistVideos.get(0));
-                        }
-                        playlistVideos.remove(0);
-                    }
-                });
-            } else {
-                isPlaying = false;
-            }
+            isPlaying = false;
         }
     }
 
@@ -595,50 +526,19 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void sendNotification(String contentText) {
-        sendNotification(contentText, playerState);
-    }
-
     private void sendNotification(int playerState) {
-        sendNotification(title, playerState);
+        this.playerState = playerState;
+        notificationService.sendNotification(this);
     }
 
-    void sendNotification(String contentText, int playerState) {
-        title = contentText;
+    private void sendNotification(String title) {
+        this.title = title;
+        notificationService.sendNotification(this);
+    }
+
+    private void sendNotification(String title, int playerState) {
         this.playerState = playerState;
-        Intent intent = new Intent();
-        NotificationCompat.Action playPauseAction;
-        if (playerState == 1) {
-            intent.setAction("com.mister_chan.ytmusic.pause");
-            PendingIntent pendingIntent = PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
-            playPauseAction = new NotificationCompat.Action.Builder(R.drawable.ic_pause, "Pause", pendingIntent).build();
-        } else {
-            intent.setAction("com.mister_chan.ytmusic.play");
-            PendingIntent pendingIntent = PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
-            playPauseAction = new NotificationCompat.Action.Builder(R.drawable.ic_play, "Play", pendingIntent).build();
-        }
-        mediaSession.setMetadata(new MediaMetadataCompat.Builder()
-                .putString(MediaMetadataCompat.METADATA_KEY_TITLE, title)
-                .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, duration * 1000)
-                .build()
-        );
-        mediaSession.setPlaybackState(new PlaybackStateCompat.Builder()
-                .setState(PlaybackStateCompat.STATE_PLAYING, 0, 1)
-                .setActions(PlaybackStateCompat.ACTION_SEEK_TO)
-                .build()
-        );
-        notification = new NotificationCompat.Builder(this, "channel")
-                .addAction(playPauseAction)
-                .addAction(nextAction)
-                .addAction(lyricsAction)
-                .setOngoing(true)
-                .setSmallIcon(R.drawable.ic_launcher_foreground)
-                .setStyle(new androidx.media.app.NotificationCompat.MediaStyle()
-                        .setMediaSession(mediaSession.getSessionToken())
-                        .setShowActionsInCompactView(0))
-                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-                .build();
-        notification.flags |= Notification.FLAG_NO_CLEAR;
-        NotificationManagerCompat.from(this).notify(1, notification);
+        this.title = title;
+        notificationService.sendNotification(this);
     }
 }
