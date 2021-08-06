@@ -36,31 +36,21 @@ public class NotificationService extends Service {
     public NotificationService() {}
 
     @Override
-    public void onCreate() {
-        super.onCreate();
-    }
-
-    @Override
     public void onDestroy() {
         super.onDestroy();
         stopForeground(true);
         stopService(new Intent(this, NotificationService.class));
     }
 
-    @Override
-    public int onStartCommand(Intent intent, int flags, int startId) {
-        return super.onStartCommand(intent, flags, startId);
-    }
-
     void sendNotification(MainActivity ma) {
         Intent intent = new Intent();
         NotificationCompat.Action playPauseAction;
-        if (ma.playerState == 1) {
-            intent.setAction("com.mister_chan.ytmusic.pause");
+        if (ma.playerState == MainActivity.PLAYER_STATE_PLAYING) {
+            intent.setAction(MainActivity.ACTION_PAUSE);
             PendingIntent pendingIntent = PendingIntent.getBroadcast(ma, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
             playPauseAction = new NotificationCompat.Action.Builder(R.drawable.ic_pause, "Pause", pendingIntent).build();
         } else {
-            intent.setAction("com.mister_chan.ytmusic.play");
+            intent.setAction(MainActivity.ACTION_PLAY);
             PendingIntent pendingIntent = PendingIntent.getBroadcast(ma, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
             playPauseAction = new NotificationCompat.Action.Builder(R.drawable.ic_play, "Play", pendingIntent).build();
         }
@@ -83,6 +73,22 @@ public class NotificationService extends Service {
                 .setStyle(new androidx.media.app.NotificationCompat.MediaStyle()
                         .setMediaSession(ma.mediaSession.getSessionToken())
                         .setShowActionsInCompactView(0))
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .build();
+        notification.flags |= Notification.FLAG_NO_CLEAR;
+        NotificationManagerCompat.from(this).notify(1, notification);
+    }
+
+    void sendScreenNotification(NotificationCompat.Action playPause, NotificationCompat.Action next, String title, String lyrics) {
+        notification = new NotificationCompat.Builder(this, "channel")
+                .addAction(playPause)
+                .addAction(next)
+                .setContentText(lyrics)
+                .setContentTitle(title)
+                .setOngoing(true)
+                .setSmallIcon(R.drawable.ic_launcher_foreground)
+                .setStyle(new androidx.media.app.NotificationCompat.MediaStyle()
+                        .setShowActionsInCompactView(0, 1))
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .build();
         notification.flags |= Notification.FLAG_NO_CLEAR;

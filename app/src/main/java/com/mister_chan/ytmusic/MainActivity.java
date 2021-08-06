@@ -92,10 +92,12 @@ public class MainActivity extends AppCompatActivity {
                                         player.evaluateJavascript("player.getDuration()", new ValueCallback<String>() {
                                             @Override
                                             public void onReceiveValue(String value) {
-                                                if (!value.equals("null")) {
+                                                if (!"null".equals(value)) {
                                                     shouldGetDuration = false;
                                                     duration = (long) Float.parseFloat(value);
-                                                    sendNotification();
+                                                    if (!isScreenOff) {
+                                                        sendNotification();
+                                                    }
                                                 }
                                             }
                                         });
@@ -109,9 +111,13 @@ public class MainActivity extends AppCompatActivity {
 
                                     // Show lyrics
                                     int centisec = (int) (f * 100) * 20 / 1000 * 1000 / 20;
-                                    String lrc = lyrics[centisec];
-                                    if (lrc != null) {
-                                        tvLyrics.setText(lrc);
+                                    String line = lyrics[centisec];
+                                    if (line != null && !lyricsLine.equals(line)) {
+                                        lyricsLine = line;
+                                        tvLyrics.setText(line);
+                                        if (isScreenOff) {
+                                            sendScreenNotification();
+                                        }
                                     }
 
                                     // Skip ending
@@ -138,16 +144,16 @@ public class MainActivity extends AppCompatActivity {
         public void onReceive(Context context, Intent intent) {
             String action = intent.getAction();
             switch (action) {
-                case "com.mister_chan.ytmusic.play":
+                case ACTION_PLAY:
                     player.loadUrl("javascript:" + PLAYER + ".playVideo()");
                     break;
-                case "com.mister_chan.ytmusic.pause":
+                case ACTION_PAUSE:
                     player.loadUrl("javascript:" + PLAYER + ".pauseVideo()");
                     break;
-                case "com.mister_chan.ytmusic.next":
+                case ACTION_NEXT:
                     player.loadUrl("javascript:" + PLAYER + ".seekTo(" + PLAYER + ".getDuration())");
                     break;
-                case "com.mister_chan.ytmusic.lyrics":
+                case ACTION_LYRICS:
                     int visibility = tvLyrics.getVisibility();
                     switch (visibility) {
                         case View.VISIBLE:
@@ -157,6 +163,24 @@ public class MainActivity extends AppCompatActivity {
                             tvLyrics.setVisibility(View.VISIBLE);
                             break;
                     }
+                    break;
+            }
+        }
+    }
+
+    private class ScreenBroadcastReceiver extends BroadcastReceiver {
+
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            String action = intent.getAction();
+            switch (action) {
+                case Intent.ACTION_SCREEN_OFF:
+                    sendScreenNotification();
+                    isScreenOff = true;
+                    break;
+                case Intent.ACTION_USER_PRESENT:
+                    sendNotification();
+                    isScreenOff = false;
                     break;
             }
         }
@@ -172,15 +196,16 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private static final int PLAYER_STATE_UNSTARTED = -1,
+    static final int PLAYER_STATE_UNSTARTED = -1,
             PLAYER_STATE_ENDED = 0,
             PLAYER_STATE_PLAYING = 1,
             PLAYER_STATE_PAUSED = 2,
             PLAYER_STATE_BUFFERING = 3,
             PLAYER_STATE_CUED = 5;
+    static final String ACTION_LYRICS = "com.mister_chan.ytmusic.lyrics", ACTION_NEXT = "com.mister_chan.ytmusic.next", ACTION_PAUSE = "com.mister_chan.ytmusic.pause", ACTION_PLAY = "com.mister_chan.ytmusic.play";
+    private static final String PLAYER = "document.getElementById(\"movie_player\")", YOUTUBE_MUSIC = "YouTube Music";
 
-    private static final String HOME = "https://m.youtube.com", PLAYER = "document.getElementById(\"movie_player\")";
-    private boolean isPlaying = false, shouldAddOnStateChangeListener = false, shouldGetDuration = false, shouldSkipBeginning = false, shouldUnmuteVideo = false;
+    private boolean isPlaying = false, isScreenOff = false, shouldAddOnStateChangeListener = false, shouldGetDuration = false, shouldSkipBeginning = false, shouldUnmuteVideo = false;
     private Button bPlayPause, bReload;
     private float beginningDuration = 0, endingDuration = 0;
     int playerState = 0;
@@ -195,7 +220,9 @@ public class MainActivity extends AppCompatActivity {
         public void onServiceConnected(ComponentName name, IBinder service) {
             NotificationService.NotificationBinder binder = (NotificationService.NotificationBinder) service;
             notificationService = binder.getService();
-            sendNotification("YouTube Music", 0);
+            title = YOUTUBE_MUSIC;
+            playerState = 0;
+            sendNotification();
             binder.startForeground();
         }
 
@@ -211,8 +238,8 @@ public class MainActivity extends AppCompatActivity {
     private final Skipping[] skippingEndings = new Skipping[] {
             new Skipping("49tpIMDy9BE", 291)
     };
-    String title = "";
-    private String nowPlaying = "";
+    String title = YOUTUBE_MUSIC;
+    private String lyricsLine = YOUTUBE_MUSIC, nowPlaying = "";
     private String[] lyrics;
     private TextView tvLyrics, tvTitle;
     private Timer timer;
@@ -323,15 +350,14 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 view.getSettings().setBlockNetworkImage(false);
-                view.loadUrl("javascript:(function() {" +
+                view.loadUrl("javascript:" +
                         "var parent = document.getElementsByTagName('head')[0];" +
                         "var style = document.createElement('style');" +
                         "var body = document.getElementsByTagName('body')[0];" +
                         "style.type = 'text/css';" +
                         "style.innerHTML = \"@font-face{font-family:MISTER_CHAN;src:url('file:///storage/emulated/0/Fonts/MISTER_CHAN_CJK.ttf');}*{font-family:MISTER_CHAN !important}\";" +
                         "parent.appendChild(style);" +
-                        "body.style.fontFamily = \"MISTER_CHAN\"" +
-                        "})()");
+                        "body.style.fontFamily = \"MISTER_CHAN\"");
                 super.onPageFinished(view, url);
             }
 
@@ -387,21 +413,25 @@ public class MainActivity extends AppCompatActivity {
                         webView.loadUrl(url);
                         player.setVisibility(View.GONE);
                         webView.setVisibility(View.VISIBLE);
-                    } else if (!v.equals(nowPlaying)) { // When loading another video
+                    } else if (!nowPlaying.equals(v)) { // When loading another video
                         beginningDuration = 0;
                         prepareNewVideo(v);
                     }
                     prepareTodoList();
+                    MainActivity.this.title = title;
                     title = title.replace(" - YouTube", "");
                     tvTitle.setText(title);
-                    sendNotification(title);
-                    bReload.setVisibility(title.equals("網頁無法使用") ? View.VISIBLE : View.GONE);
+                    if (isScreenOff) {
+                        sendScreenNotification();
+                    } else {
+                        sendNotification();
+                    }
                 }
                 super.onReceivedTitle(view, title);
             }
         });
         player.setVisibility(View.GONE);
-        webView.loadUrl(HOME);
+        webView.loadUrl("https://m.youtube.com");
 
         // Initial lyrics window
         windowManager = (WindowManager)getSystemService(WINDOW_SERVICE);
@@ -415,7 +445,7 @@ public class MainActivity extends AppCompatActivity {
         tvLyrics = new TextView(this);
         tvLyrics.setMaxLines(1);
         tvLyrics.setPadding(0, 0x100, 0, 0);
-        tvLyrics.setText("YouTube Music");
+        tvLyrics.setText(YOUTUBE_MUSIC);
         tvLyrics.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
         tvLyrics.setTextColor(Color.RED);
         tvLyrics.setTextSize(24);
@@ -424,20 +454,20 @@ public class MainActivity extends AppCompatActivity {
 
         // Initial notification
         NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
-        NotificationChannel nc = new NotificationChannel("channel", "Channel", NotificationManager.IMPORTANCE_LOW);
+        NotificationChannel nc = new NotificationChannel("channel", "Media Controls", NotificationManager.IMPORTANCE_LOW);
         nm.createNotificationChannel(nc);
-        IntentFilter intentFilter = new IntentFilter();
-        intentFilter.addAction("com.mister_chan.ytmusic.lyrics");
-        intentFilter.addAction("com.mister_chan.ytmusic.next");
-        intentFilter.addAction("com.mister_chan.ytmusic.play");
-        intentFilter.addAction("com.mister_chan.ytmusic.pause");
+        IntentFilter notificationIntentFilter = new IntentFilter();
+        notificationIntentFilter.addAction(ACTION_LYRICS);
+        notificationIntentFilter.addAction(ACTION_NEXT);
+        notificationIntentFilter.addAction(ACTION_PLAY);
+        notificationIntentFilter.addAction(ACTION_PAUSE);
         lyricsAction = new NotificationCompat.Action.Builder(
                 R.drawable.ic_lyrics,
                 "Lyrics",
                 PendingIntent.getBroadcast(
                         this,
                         0,
-                        new Intent("com.mister_chan.ytmusic.lyrics"),
+                        new Intent(ACTION_LYRICS),
                         PendingIntent.FLAG_UPDATE_CURRENT))
                 .build();
         nextAction = new NotificationCompat.Action.Builder(
@@ -446,21 +476,23 @@ public class MainActivity extends AppCompatActivity {
                 PendingIntent.getBroadcast(
                         this,
                         0,
-                        new Intent("com.mister_chan.ytmusic.next"),
+                        new Intent(ACTION_NEXT),
                         PendingIntent.FLAG_UPDATE_CURRENT))
                 .build();
-        registerReceiver(new MainActivity.NotificationReceiver(), intentFilter);
+        registerReceiver(new NotificationReceiver(), notificationIntentFilter);
         mediaSession = new MediaSessionCompat(this, "PlayService");
         mediaSession.setMetadata(new MediaMetadataCompat.Builder()
-                .putString(MediaMetadataCompat.METADATA_KEY_TITLE, "YouTube Music")
+                .putString(MediaMetadataCompat.METADATA_KEY_TITLE, YOUTUBE_MUSIC)
                 .build()
         );
         Intent notificationIntent = new Intent(this, NotificationService.class);
         bindService(notificationIntent, connection, Context.BIND_AUTO_CREATE);
 
-        // [Unfinished] Show when screen locked
-        setShowWhenLocked(true);
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        // Show when screen locked
+        IntentFilter screenIntentFilter = new IntentFilter();
+        screenIntentFilter.addAction(Intent.ACTION_SCREEN_OFF);
+        screenIntentFilter.addAction(Intent.ACTION_USER_PRESENT);
+        registerReceiver(new ScreenBroadcastReceiver(), screenIntentFilter);
 
         // Start timer
         timer = new Timer();
@@ -496,7 +528,12 @@ public class MainActivity extends AppCompatActivity {
     @JavascriptInterface
     public void onStateChange(int data) {
         bPlayPause.setText(data == PLAYER_STATE_PLAYING ? "⏸" : "⏵");
-        sendNotification(data);
+        playerState = data;
+        if (isScreenOff) {
+            sendScreenNotification();
+        } else {
+            sendNotification();
+        }
     }
 
     private void prepareNewVideo(String v) {
@@ -526,26 +563,26 @@ public class MainActivity extends AppCompatActivity {
 
     private void readLyrics(String v) {
         lyrics = new String[0x20000];
+        lyricsLine = YOUTUBE_MUSIC;
         try {
             BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(
-                    "/sdcard/YTMusic/" + v + ".lrc"
-            ), StandardCharsets.UTF_8));
+                    "/sdcard/YTMusic/" + v + ".lrc"),
+                    StandardCharsets.UTF_8));
             String line = "";
             while ((line = br.readLine()) != null) {
                 Matcher m = Pattern.compile(
-                    "\\[(?<min>\\d{2}):(?<sec>\\d{2})\\.(?<centisec>\\d{2})\\](?:\\[\\d{2}:\\d{2}\\.\\d{2}\\])*(?<lrc>[^\\[\\]]+)$"
-                ).matcher(line);
+                        "\\[(?<min>\\d{2}):(?<sec>\\d{2})\\.(?<centisec>\\d{2})\\](?:\\[\\d{2}:\\d{2}\\.\\d{2}\\])*(?<lrc>[^\\[\\]]+)$")
+                        .matcher(line);
                 for (int i = 0; m.find(i); i += 10) {
-                    lyrics[
-                        Integer.parseInt(m.group("min")) * 6000 +
-                        Integer.parseInt(m.group("sec")) * 100 +
-                        Integer.parseInt(m.group("centisec"))
-                    ] = m.group("lrc");
+                    lyrics[Integer.parseInt(m.group("min")) * 6000
+                            + Integer.parseInt(m.group("sec")) * 100
+                            + Integer.parseInt(m.group("centisec"))] =
+                            m.group("lrc");
                 }
             }
             br.close();
         } catch (FileNotFoundException e) {
-            tvLyrics.setText("YouTube Music");
+            tvLyrics.setText(YOUTUBE_MUSIC);
             e.printStackTrace();
         } catch (IOException e) {
             e.printStackTrace();
@@ -556,19 +593,18 @@ public class MainActivity extends AppCompatActivity {
         notificationService.sendNotification(this);
     }
 
-    private void sendNotification(int playerState) {
-        this.playerState = playerState;
-        notificationService.sendNotification(this);
-    }
-
-    private void sendNotification(String title) {
-        this.title = title;
-        notificationService.sendNotification(this);
-    }
-
-    private void sendNotification(String title, int playerState) {
-        this.playerState = playerState;
-        this.title = title;
-        notificationService.sendNotification(this);
+    private void sendScreenNotification() {
+        Intent intent = new Intent();
+        NotificationCompat.Action playPauseAction;
+        if (playerState == MainActivity.PLAYER_STATE_PLAYING) {
+            intent.setAction(MainActivity.ACTION_PAUSE);
+            PendingIntent pendingIntent = PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
+            playPauseAction = new NotificationCompat.Action.Builder(R.drawable.ic_pause, "Pause", pendingIntent).build();
+        } else {
+            intent.setAction(MainActivity.ACTION_PLAY);
+            PendingIntent pendingIntent = PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
+            playPauseAction = new NotificationCompat.Action.Builder(R.drawable.ic_play, "Play", pendingIntent).build();
+        }
+        notificationService.sendScreenNotification(playPauseAction, nextAction, title, lyricsLine);
     }
 }
