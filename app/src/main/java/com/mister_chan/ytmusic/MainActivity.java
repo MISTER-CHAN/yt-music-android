@@ -60,8 +60,8 @@ public class MainActivity extends AppCompatActivity {
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
-                    player.evaluateJavascript(
-                            "var player = " + PLAYER + ";" +
+                    player.evaluateJavascript("" +
+                                    "var player = " + PLAYER + ";" +
                                     "if (player != null)" +
                                     "    player.getCurrentTime()",
                             new ValueCallback<String>() {
@@ -78,7 +78,7 @@ public class MainActivity extends AppCompatActivity {
                                         onStateChange(PLAYER_STATE_PLAYING);
                                         player.loadUrl("javascript:" +
                                                         "player.addEventListener(\"onStateChange\", function (data) {" +
-                                                        "    MainActivity.onStateChange(data)" +
+                                                        "    mainActivity.onStateChange(data)" +
                                                         "})");
                                     }
                                     if (shouldSkipBeginning) {
@@ -202,7 +202,10 @@ public class MainActivity extends AppCompatActivity {
             PLAYER_STATE_PAUSED = 2,
             PLAYER_STATE_BUFFERING = 3,
             PLAYER_STATE_CUED = 5;
-    static final String ACTION_LYRICS = "com.mister_chan.ytmusic.lyrics", ACTION_NEXT = "com.mister_chan.ytmusic.next", ACTION_PAUSE = "com.mister_chan.ytmusic.pause", ACTION_PLAY = "com.mister_chan.ytmusic.play";
+    static final String ACTION_LYRICS = "com.mister_chan.ytmusic.lyrics",
+            ACTION_NEXT = "com.mister_chan.ytmusic.next",
+            ACTION_PAUSE = "com.mister_chan.ytmusic.pause",
+            ACTION_PLAY = "com.mister_chan.ytmusic.play";
     private static final String PLAYER = "document.getElementById(\"movie_player\")", YOUTUBE_MUSIC = "YouTube Music";
 
     private boolean isPlaying = false, isScreenOff = false, shouldAddOnStateChangeListener = false, shouldGetDuration = false, shouldSkipBeginning = false, shouldUnmuteVideo = false;
@@ -330,7 +333,7 @@ public class MainActivity extends AppCompatActivity {
         WebSettings ws = player.getSettings();
         ws.setMediaPlaybackRequiresUserGesture(false);
         ws.setUserAgentString("Chrome");
-        player.addJavascriptInterface(this, "MainActivity");
+        player.addJavascriptInterface(this, "mainActivity");
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public void onLoadResource(WebView view, String url) {
@@ -373,8 +376,7 @@ public class MainActivity extends AppCompatActivity {
                 if (request.getUrl().toString().contains("MISTER_CHAN")) {
                     try {
                         InputStream is = new FileInputStream(
-                                "/storage/emulated/0/Fonts/MISTER_CHAN_CJK.ttf"
-                        );
+                                "/storage/emulated/0/Fonts/MISTER_CHAN_CJK.ttf");
                         return new WebResourceResponse("application/x-font-ttf", "UTF-8", is);
                     } catch (FileNotFoundException e) {
                         e.printStackTrace();
