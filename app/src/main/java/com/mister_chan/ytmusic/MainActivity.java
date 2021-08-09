@@ -47,6 +47,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.util.Locale;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.regex.Matcher;
@@ -71,6 +72,18 @@ public class MainActivity extends AppCompatActivity {
                             if (isNumeric(value)) {
                                 float f = Float.parseFloat(value);
                                 if (f > 0) {
+
+                                    // Show lyrics
+                                    int centisec = (int) (f * 100) * 20 / 1000 * 1000 / 20;
+                                    String line = lyrics[centisec];
+                                    if (line != null && !lyricsLine.equals(line)) {
+                                        line = line.toUpperCase(Locale.ROOT);
+                                        lyricsLine = line;
+                                        tvLyrics.setText(line);
+                                        if (isScreenOff) {
+                                            sendScreenNotification();
+                                        }
+                                    }
 
                                     // Should-dos
                                     if (shouldAddOnStateChangeListener) {
@@ -109,25 +122,11 @@ public class MainActivity extends AppCompatActivity {
                                     }
                                     beginningDuration = f;
 
-                                    // Show lyrics
-                                    int centisec = (int) (f * 100) * 20 / 1000 * 1000 / 20;
-                                    String line = lyrics[centisec];
-                                    if (line != null && !lyricsLine.equals(line)) {
-                                        lyricsLine = line;
-                                        tvLyrics.setText(line);
-                                        if (isScreenOff) {
-                                            sendScreenNotification();
-                                        }
-                                    }
-
                                     // Skip ending
                                     if (endingDuration > 0) {
                                         if (f >= endingDuration) {
-                                            player.evaluateJavascript("player.seekTo(player.getDuration())", new ValueCallback<String>() {
-                                                @Override
-                                                public void onReceiveValue(String value) {
-                                                }
-                                            });
+                                            player.loadUrl("javascript:" +
+                                                    "player.seekTo(player.getDuration())");
                                         }
                                     }
                                 }
