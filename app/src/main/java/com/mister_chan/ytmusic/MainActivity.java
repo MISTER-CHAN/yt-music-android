@@ -396,8 +396,8 @@ public class MainActivity extends AppCompatActivity {
                         prepareNewVideo(v);
                     }
                     prepareTodoList();
-                    MainActivity.this.title = title;
                     title = title.replace(" - YouTube", "");
+                    MainActivity.this.title = title;
                     tvTitle.setText(title);
                     if (isScreenOff) {
                         sendScreenNotification();
