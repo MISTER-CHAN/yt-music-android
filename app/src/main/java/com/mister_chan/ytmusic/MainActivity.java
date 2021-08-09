@@ -212,7 +212,7 @@ public class MainActivity extends AppCompatActivity {
     float beginningDuration = 0;
     private float endingDuration = 0;
     int playerState = 0;
-    private LinearLayout llWebView, llTitle;
+    private LinearLayout llWebView;
     long duration = 0;
     MediaSessionCompat mediaSession;
     private MediaWebView player;
@@ -289,7 +289,6 @@ public class MainActivity extends AppCompatActivity {
 
         bPlayPause = findViewById(R.id.b_play_pause);
         bReload = findViewById(R.id.b_reload);
-        llTitle = findViewById(R.id.ll_title);
         llWebView = findViewById(R.id.ll_webview);
         tvTitle = findViewById(R.id.tv_title);
 
@@ -315,7 +314,7 @@ public class MainActivity extends AppCompatActivity {
                 player.reload();
             }
         });
-        llTitle.setOnClickListener(new View.OnClickListener() {
+        findViewById(R.id.ll_title).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 if (isPlaying) {
