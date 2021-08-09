@@ -209,7 +209,8 @@ public class MainActivity extends AppCompatActivity {
 
     private boolean isPlaying = false, isScreenOff = false, shouldAddOnStateChangeListener = false, shouldGetDuration = false, shouldSkipBeginning = false, shouldUnmuteVideo = false;
     private Button bPlayPause, bReload;
-    private float beginningDuration = 0, endingDuration = 0;
+    float beginningDuration = 0;
+    private float endingDuration = 0;
     int playerState = 0;
     private LinearLayout llWebView, llTitle;
     long duration = 0;
@@ -421,7 +422,6 @@ public class MainActivity extends AppCompatActivity {
         wmlp.gravity = Gravity.CENTER_VERTICAL | Gravity.TOP;
         wmlp.type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
         tvLyrics = new TextView(this);
-        tvLyrics.setMaxLines(1);
         tvLyrics.setPadding(0, 0x100, 0, 0);
         tvLyrics.setText(YOUTUBE_MUSIC);
         tvLyrics.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
@@ -544,9 +544,9 @@ public class MainActivity extends AppCompatActivity {
         lyricsLine = YOUTUBE_MUSIC;
         try {
             BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(
-                    "/sdcard/YTMusic/" + v + ".lrc"),
+                    "/sdcard/YTMusic/lyrics/" + v + ".lrc"),
                     StandardCharsets.UTF_8));
-            String line = "";
+            String line;
             while ((line = br.readLine()) != null) {
                 Matcher m = Pattern.compile(
                         "\\[(?<min>\\d{2}):(?<sec>\\d{2})\\.(?<centisec>\\d{2})\\](?:\\[\\d{2}:\\d{2}\\.\\d{2}\\])*(?<lrc>[^\\[\\]]+)$")

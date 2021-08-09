@@ -43,16 +43,19 @@ public class NotificationService extends Service {
     }
 
     void sendNotification(MainActivity ma) {
+        float playbackSpeed;
         Intent intent = new Intent();
         NotificationCompat.Action playPauseAction;
         if (ma.playerState == MainActivity.PLAYER_STATE_PLAYING) {
             intent.setAction(MainActivity.ACTION_PAUSE);
             PendingIntent pendingIntent = PendingIntent.getBroadcast(ma, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
             playPauseAction = new NotificationCompat.Action.Builder(R.drawable.ic_pause, "Pause", pendingIntent).build();
+            playbackSpeed = 1;
         } else {
             intent.setAction(MainActivity.ACTION_PLAY);
             PendingIntent pendingIntent = PendingIntent.getBroadcast(ma, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
             playPauseAction = new NotificationCompat.Action.Builder(R.drawable.ic_play, "Play", pendingIntent).build();
+            playbackSpeed = 0;
         }
         ma.mediaSession.setMetadata(new MediaMetadataCompat.Builder()
                 .putString(MediaMetadataCompat.METADATA_KEY_TITLE, ma.title)
@@ -60,8 +63,7 @@ public class NotificationService extends Service {
                 .build()
         );
         ma.mediaSession.setPlaybackState(new PlaybackStateCompat.Builder()
-                .setState(PlaybackStateCompat.STATE_PLAYING, 0, 1)
-                .setActions(PlaybackStateCompat.ACTION_SEEK_TO)
+                .setState(PlaybackStateCompat.STATE_PLAYING, (long) ma.beginningDuration * 1000, playbackSpeed)
                 .build()
         );
         notification = new NotificationCompat.Builder(this, "channel")
