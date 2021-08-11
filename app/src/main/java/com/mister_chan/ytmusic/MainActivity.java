@@ -18,6 +18,7 @@ import android.os.Bundle;
 import android.os.IBinder;
 import android.support.v4.media.MediaMetadataCompat;
 import android.support.v4.media.session.MediaSessionCompat;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
@@ -35,6 +36,7 @@ import android.webkit.WebViewClient;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
@@ -77,8 +79,14 @@ public class MainActivity extends AppCompatActivity {
                                     int centisec = (int) (f * 100) * 20 / 1000 * 1000 / 20;
                                     String line = lyrics[centisec];
                                     if (line != null && !lyricsLine.equals(line)) {
-                                        line = line.toUpperCase(Locale.ROOT);
                                         lyricsLine = line;
+                                        Matcher lyricsStyleMatcher = Pattern.compile("\\{(?<style>[^{}]*)\\}").matcher(line);
+                                        while (lyricsStyleMatcher.find()) {
+                                            setLyricsStyle(lyricsStyleMatcher.group("style"));
+                                        }
+                                        line = line.replaceAll("\\{.*\\}", "");
+                                        line = line.toUpperCase(Locale.ROOT);
+                                        stylelessLyricsLine = line;
                                         tvLyrics.setText(line);
                                         if (isScreenOff) {
                                             sendScreenNotification();
@@ -242,7 +250,7 @@ public class MainActivity extends AppCompatActivity {
             new Skipping("49tpIMDy9BE", 291)
     };
     String title = YOUTUBE_MUSIC;
-    private String lyricsLine = YOUTUBE_MUSIC, nowPlaying = "";
+    private String lyricsLine = YOUTUBE_MUSIC, nowPlaying = "", stylelessLyricsLine = YOUTUBE_MUSIC;
     private String[] lyrics;
     private TextView tvLyrics, tvTitle;
     private Timer timer;
@@ -541,6 +549,8 @@ public class MainActivity extends AppCompatActivity {
     private void readLyrics(String v) {
         lyrics = new String[0x20000];
         lyricsLine = YOUTUBE_MUSIC;
+        stylelessLyricsLine = YOUTUBE_MUSIC;
+        tvLyrics.setTextColor(Color.RED);
         try {
             BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(
                     "/sdcard/YTMusic/lyrics/" + v + ".lrc"),
@@ -582,6 +592,36 @@ public class MainActivity extends AppCompatActivity {
             PendingIntent pendingIntent = PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
             playPauseAction = new NotificationCompat.Action.Builder(R.drawable.ic_play, "Play", pendingIntent).build();
         }
-        notificationService.sendScreenNotification(playPauseAction, nextAction, title, lyricsLine);
+        notificationService.sendScreenNotification(playPauseAction, nextAction, title, stylelessLyricsLine);
+    }
+
+    private void setLyricsStyle(String style) {
+        Log.d("style", style);
+        switch (style) {
+            case "BLACK":
+                tvLyrics.setTextColor(Color.BLACK);
+                break;
+            case "BLUE":
+                tvLyrics.setTextColor(Color.BLUE);
+                break;
+            case "GREEN":
+                tvLyrics.setTextColor(Color.GREEN);
+                break;
+            case "CYAN":
+                tvLyrics.setTextColor(Color.CYAN);
+                break;
+            case "RED":
+                tvLyrics.setTextColor(Color.RED);
+                break;
+            case "MAGENTA":
+                tvLyrics.setTextColor(Color.MAGENTA);
+                break;
+            case "YELLOW":
+                tvLyrics.setTextColor(Color.YELLOW);
+                break;
+            case "WHITE":
+                tvLyrics.setTextColor(Color.WHITE);
+                break;
+        }
     }
 }
