@@ -80,11 +80,7 @@ public class MainActivity extends AppCompatActivity {
                                     String line = lyrics[centisec];
                                     if (line != null && !lyricsLine.equals(line)) {
                                         lyricsLine = line;
-                                        Matcher lyricsStyleMatcher = Pattern.compile("\\{(?<style>[^{}]*)\\}").matcher(line);
-                                        while (lyricsStyleMatcher.find()) {
-                                            setLyricsStyle(lyricsStyleMatcher.group("style"));
-                                        }
-                                        line = line.replaceAll("\\{.*\\}", "");
+                                        line = stylizeLyrics(line);
                                         line = line.toUpperCase(Locale.ROOT);
                                         stylelessLyricsLine = line;
                                         tvLyrics.setText(line);
@@ -556,15 +552,23 @@ public class MainActivity extends AppCompatActivity {
                     "/sdcard/YTMusic/lyrics/" + v + ".lrc"),
                     StandardCharsets.UTF_8));
             String line;
+            int offset = 0;
             while ((line = br.readLine()) != null) {
-                Matcher m = Pattern.compile(
+                Matcher matcher;
+                if ((matcher = Pattern.compile(
                         "\\[(?<min>\\d{2}):(?<sec>\\d{2})\\.(?<centisec>\\d{2})\\](?:\\[\\d{2}:\\d{2}\\.\\d{2}\\])*(?<lrc>[^\\[\\]]+)$")
-                        .matcher(line);
-                for (int i = 0; m.find(i); i += 10) {
-                    lyrics[Integer.parseInt(m.group("min")) * 6000
-                            + Integer.parseInt(m.group("sec")) * 100
-                            + Integer.parseInt(m.group("centisec"))] =
-                            m.group("lrc");
+                        .matcher(line)).find()) {
+                    for (int i = 0; matcher.find(i); i += 10) {
+                        lyrics[Integer.parseInt(matcher.group("min")) * 6000
+                                + Integer.parseInt(matcher.group("sec")) * 100
+                                + Integer.parseInt(matcher.group("centisec"))
+                                + offset / 10] =
+                                matcher.group("lrc");
+                    }
+                } else if ((matcher = Pattern.compile("\\[ti:(?<ti>.*)\\]").matcher(line)).find()) {
+                    tvLyrics.setText(stylizeLyrics(matcher.group("ti")).toUpperCase(Locale.ROOT));
+                } else if ((matcher = Pattern.compile("\\[offset:(?<offset>.*)\\]").matcher(line)).find()) {
+                    offset = Integer.parseInt(matcher.group("offset"));
                 }
             }
             br.close();
@@ -622,5 +626,13 @@ public class MainActivity extends AppCompatActivity {
                 tvLyrics.setTextColor(Color.WHITE);
                 break;
         }
+    }
+
+    private String stylizeLyrics(String lyrics) {
+        Matcher matcher = Pattern.compile("\\{(?<style>[^{}]*)\\}").matcher(lyrics);
+        while (matcher.find()) {
+            setLyricsStyle(matcher.group("style"));
+        }
+        return lyrics.replaceAll("\\{.*\\}", "");
     }
 }
