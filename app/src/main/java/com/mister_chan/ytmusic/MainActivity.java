@@ -596,7 +596,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setLyricsStyle(String style) {
-        Log.d("style", style);
         switch (style) {
             case "BLACK":
                 tvLyrics.setTextColor(Color.BLACK);
