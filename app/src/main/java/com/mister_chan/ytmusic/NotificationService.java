@@ -63,7 +63,7 @@ public class NotificationService extends Service {
                 .build()
         );
         ma.mediaSession.setPlaybackState(new PlaybackStateCompat.Builder()
-                .setState(PlaybackStateCompat.STATE_PLAYING, (long) ma.beginningDuration * 1000, playbackSpeed)
+                .setState(PlaybackStateCompat.STATE_PLAYING, (long) ma.lastPosition * 1000, playbackSpeed)
                 .build()
         );
         notification = new NotificationCompat.Builder(this, "channel")

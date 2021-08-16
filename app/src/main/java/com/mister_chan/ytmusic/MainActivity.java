@@ -29,16 +29,13 @@ import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
-import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 
-import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.NotificationCompat;
 
@@ -46,9 +43,10 @@ import java.io.BufferedReader;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.Timer;
 import java.util.TimerTask;
@@ -94,15 +92,28 @@ public class MainActivity extends AppCompatActivity {
                                         shouldAddOnStateChangeListener = false;
                                         onStateChange(PLAYER_STATE_PLAYING);
                                         player.loadUrl("javascript:" +
-                                                        "player.addEventListener(\"onStateChange\", function (data) {" +
-                                                        "    mainActivity.onStateChange(data)" +
-                                                        "})");
+                                                "player.addEventListener(\"onStateChange\", function (data) {" +
+                                                "    mainActivity.onStateChange(data)" +
+                                                "})");
                                     }
-                                    if (shouldSkipBeginning) {
-                                        shouldSkipBeginning = false;
-                                        if (f < beginningDuration) {
+                                    if (shouldSeekToLastPosition) {
+                                        shouldSeekToLastPosition = false;
+                                        if (f < lastPosition) {
                                             player.loadUrl("javascript:" +
-                                                    "player.seekTo(" + beginningDuration + ")");
+                                                    "player.seekTo(" + lastPosition + ")");
+                                        }
+                                    } else if (skippings.size() > 0) {
+                                        Skipping skipping = skippings.get(0);
+                                        skippings.remove(0);
+                                        if (f >= skipping.from) {
+                                            player.loadUrl("javascript:" +
+                                                    "(function () {" +
+                                                    "    var to = " + skipping.to + ";" +
+                                                    "    if (to <= 0) {" +
+                                                    "        to = player.getDuration();" +
+                                                    "    }" +
+                                                    "    player.seekTo(to)" +
+                                                    "})()");
                                         }
                                     }
                                     if (shouldGetDuration) {
@@ -124,15 +135,7 @@ public class MainActivity extends AppCompatActivity {
                                         player.loadUrl("javascript:" +
                                                 "player.unMute()");
                                     }
-                                    beginningDuration = f;
-
-                                    // Skip ending
-                                    if (endingDuration > 0) {
-                                        if (f >= endingDuration) {
-                                            player.loadUrl("javascript:" +
-                                                    "player.seekTo(player.getDuration())");
-                                        }
-                                    }
+                                    lastPosition = f;
                                 }
                             }
                         }
@@ -190,12 +193,11 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private static class Skipping {
-        public String v = "";
-        public float when;
+        public float from, to;
 
-        public Skipping(String v, float when) {
-            this.v = v;
-            this.when = when;
+        public Skipping(float from, float to) {
+            this.from = from;
+            this.to = to;
         }
     }
 
@@ -211,12 +213,12 @@ public class MainActivity extends AppCompatActivity {
             ACTION_PLAY = "com.mister_chan.ytmusic.play";
     private static final String PLAYER = "document.getElementById(\"movie_player\")", YOUTUBE_MUSIC = "YouTube Music";
 
-    private boolean isPlaying = false, isScreenOff = false, shouldAddOnStateChangeListener = false, shouldGetDuration = false, shouldSkipBeginning = false, shouldUnmuteVideo = false;
+    private boolean isPlaying = false, isScreenOff = false, shouldAddOnStateChangeListener = false, shouldGetDuration = false, shouldSeekToLastPosition = false, shouldUnmuteVideo = false;
     private Button bPlayPause, bReload;
-    float beginningDuration = 0;
-    private float endingDuration = 0;
+    float lastPosition = 0;
     int playerState = 0;
     private LinearLayout llWebView;
+    private final List<Skipping> skippings = new ArrayList<>();
     long duration = 0;
     MediaSessionCompat mediaSession;
     private MediaWebView player;
@@ -237,13 +239,6 @@ public class MainActivity extends AppCompatActivity {
         public void onServiceDisconnected(ComponentName name) {
 
         }
-    };
-    private final Skipping[] skippingBeginnings = new Skipping[] {
-            new Skipping("l2nRYRiEY6Y", 4),
-            new Skipping("wrczjnLqfZk", 28)
-    };
-    private final Skipping[] skippingEndings = new Skipping[] {
-            new Skipping("49tpIMDy9BE", 291)
     };
     String title = YOUTUBE_MUSIC;
     private String lyricsLine = YOUTUBE_MUSIC, nowPlaying = "", stylelessLyricsLine = YOUTUBE_MUSIC;
@@ -344,7 +339,8 @@ public class MainActivity extends AppCompatActivity {
                 if (v != null) {
                     view.goBack();
                     player.loadUrl(url.replace("&pbj=1", "").replace("://m.", "://www."));
-                    beginningDuration = 0;
+                    lastPosition = 0;
+                    skippings.clear();
                     prepareNewVideo(v);
                     prepareTodoList();
                     webView.setVisibility(View.GONE);
@@ -396,7 +392,8 @@ public class MainActivity extends AppCompatActivity {
                         player.setVisibility(View.GONE);
                         webView.setVisibility(View.VISIBLE);
                     } else if (!nowPlaying.equals(v)) { // When loading another video
-                        beginningDuration = 0;
+                        lastPosition = 0;
+                        skippings.clear();
                         prepareNewVideo(v);
                     }
                     prepareTodoList();
@@ -521,24 +518,12 @@ public class MainActivity extends AppCompatActivity {
         readLyrics(v);
         nowPlaying = v;
         isPlaying = true;
-
-        for (Skipping s : skippingBeginnings) {
-            if (nowPlaying.equals(s.v)) {
-                beginningDuration = s.when;
-            }
-        }
-        endingDuration = 0;
-        for (Skipping s : skippingEndings) {
-            if (nowPlaying.equals(s.v)) {
-                endingDuration = s.when;
-            }
-        }
     }
 
     private void prepareTodoList() {
         shouldAddOnStateChangeListener = true;
         shouldGetDuration = true;
-        shouldSkipBeginning = true;
+        shouldSeekToLastPosition = true;
         shouldUnmuteVideo = true;
     }
 
@@ -569,6 +554,10 @@ public class MainActivity extends AppCompatActivity {
                     tvLyrics.setText(stylizeLyrics(matcher.group("ti")).toUpperCase(Locale.ROOT));
                 } else if ((matcher = Pattern.compile("\\[offset:(?<offset>.*)\\]").matcher(line)).find()) {
                     offset = Integer.parseInt(matcher.group("offset"));
+                } else if ((matcher = Pattern.compile("\\[skipping:(?<from>.*),(?<to>.*)\\]").matcher(line)).find()) {
+                    skippings.add(new Skipping(
+                            Float.parseFloat(matcher.group("from")),
+                            Float.parseFloat(matcher.group("to"))));
                 }
             }
             br.close();
