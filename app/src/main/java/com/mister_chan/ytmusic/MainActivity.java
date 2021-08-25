@@ -35,6 +35,7 @@ import android.webkit.WebViewClient;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.NotificationCompat;
@@ -296,14 +297,7 @@ public class MainActivity extends AppCompatActivity {
         bPlayPause.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                player.loadUrl("javascript:" +
-                        "var player = " + PLAYER + ";" +
-                        "if (player != null) {" +
-                        "    if (player.getPlayerState() == 1)" +
-                        "        player.pauseVideo();" +
-                        "    else" +
-                        "        player.playVideo()" +
-                        "}");
+                toggleState();
             }
         });
         bReload.setOnClickListener(new View.OnClickListener() {
@@ -487,18 +481,22 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
-        if (keyCode == KeyEvent.KEYCODE_BACK) {
-            if (webView.getVisibility() == View.VISIBLE) {
-                if (webView.canGoBack()) {
-                    webView.goBack();
-                } else {
-                    moveTaskToBack(false);
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_BACK:
+                if (webView.getVisibility() == View.VISIBLE) {
+                    if (webView.canGoBack()) {
+                        webView.goBack();
+                    } else {
+                        moveTaskToBack(false);
+                    }
+                } else if (player.getVisibility() == View.VISIBLE) {
+                    player.setVisibility(View.GONE);
+                    webView.setVisibility(View.VISIBLE);
                 }
-            } else if (player.getVisibility() == View.VISIBLE) {
-                player.setVisibility(View.GONE);
-                webView.setVisibility(View.VISIBLE);
-            }
-            return true;
+                return true;
+            case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
+                toggleState();
+                break;
         }
         return super.onKeyDown(keyCode, event);
     }
@@ -623,5 +621,16 @@ public class MainActivity extends AppCompatActivity {
             setLyricsStyle(matcher.group("style"));
         }
         return lyrics.replaceAll("\\{.*\\}", "");
+    }
+
+    private void toggleState() {
+        player.loadUrl("javascript:" +
+                "var player = " + PLAYER + ";" +
+                "if (player != null) {" +
+                "    if (player.getPlayerState() == 1)" +
+                "        player.pauseVideo();" +
+                "    else" +
+                "        player.playVideo()" +
+                "}");
     }
 }
