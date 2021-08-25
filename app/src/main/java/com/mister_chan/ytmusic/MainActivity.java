@@ -146,53 +146,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private class NotificationReceiver extends BroadcastReceiver {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            String action = intent.getAction();
-            switch (action) {
-                case ACTION_PLAY:
-                    player.loadUrl("javascript:" + PLAYER + ".playVideo()");
-                    break;
-                case ACTION_PAUSE:
-                    player.loadUrl("javascript:" + PLAYER + ".pauseVideo()");
-                    break;
-                case ACTION_NEXT:
-                    player.loadUrl("javascript:" + PLAYER + ".seekTo(" + PLAYER + ".getDuration())");
-                    break;
-                case ACTION_LYRICS:
-                    int visibility = tvLyrics.getVisibility();
-                    switch (visibility) {
-                        case View.VISIBLE:
-                            tvLyrics.setVisibility(View.GONE);
-                            break;
-                        case View.GONE:
-                            tvLyrics.setVisibility(View.VISIBLE);
-                            break;
-                    }
-                    break;
-            }
-        }
-    }
-
-    private class ScreenBroadcastReceiver extends BroadcastReceiver {
-
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            String action = intent.getAction();
-            switch (action) {
-                case Intent.ACTION_SCREEN_OFF:
-                    sendScreenNotification();
-                    isScreenOff = true;
-                    break;
-                case Intent.ACTION_USER_PRESENT:
-                    sendNotification();
-                    isScreenOff = false;
-                    break;
-            }
-        }
-    }
-
     private static class Skipping {
         public float from, to;
 
@@ -208,10 +161,10 @@ public class MainActivity extends AppCompatActivity {
             PLAYER_STATE_PAUSED = 2,
             PLAYER_STATE_BUFFERING = 3,
             PLAYER_STATE_CUED = 5;
-    static final String ACTION_LYRICS = "com.mister_chan.ytmusic.lyrics",
-            ACTION_NEXT = "com.mister_chan.ytmusic.next",
-            ACTION_PAUSE = "com.mister_chan.ytmusic.pause",
-            ACTION_PLAY = "com.mister_chan.ytmusic.play";
+    static final String ACTION_LYRICS = "com.mister_chan.ytmusic.action.LYRICS",
+            ACTION_NEXT = "com.mister_chan.ytmusic.action.NEXT",
+            ACTION_PAUSE = "com.mister_chan.ytmusic.action.PAUSE",
+            ACTION_PLAY = "com.mister_chan.ytmusic.action.PLAY";
     private static final String PLAYER = "document.getElementById(\"movie_player\")", YOUTUBE_MUSIC = "YouTube Music";
 
     private boolean isPlaying = false, isScreenOff = false, shouldAddOnStateChangeListener = false, shouldGetDuration = false, shouldSeekToLastPosition = false, shouldUnmuteVideo = false;
@@ -451,7 +404,35 @@ public class MainActivity extends AppCompatActivity {
                         new Intent(ACTION_NEXT),
                         PendingIntent.FLAG_UPDATE_CURRENT))
                 .build();
-        registerReceiver(new NotificationReceiver(), notificationIntentFilter);
+        registerReceiver(new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                String action = intent.getAction();
+                switch (action) {
+                    case ACTION_PLAY:
+                        player.loadUrl("javascript:" + PLAYER + ".playVideo()");
+                        break;
+                    case ACTION_PAUSE:
+                        player.loadUrl("javascript:" + PLAYER + ".pauseVideo()");
+                        break;
+                    case ACTION_NEXT:
+                        player.loadUrl("javascript:" + PLAYER + ".seekTo(" + PLAYER + ".getDuration())");
+                        break;
+                    case ACTION_LYRICS:
+                        int visibility = tvLyrics.getVisibility();
+                        switch (visibility) {
+                            case View.VISIBLE:
+                                tvLyrics.setVisibility(View.GONE);
+                                break;
+                            case View.GONE:
+                                tvLyrics.setVisibility(View.VISIBLE);
+                                break;
+                        }
+                        break;
+                }
+                abortBroadcast();
+            }
+        }, notificationIntentFilter);
         mediaSession = new MediaSessionCompat(this, "PlayService");
         mediaSession.setMetadata(new MediaMetadataCompat.Builder()
                 .putString(MediaMetadataCompat.METADATA_KEY_TITLE, YOUTUBE_MUSIC)
@@ -464,7 +445,23 @@ public class MainActivity extends AppCompatActivity {
         IntentFilter screenIntentFilter = new IntentFilter();
         screenIntentFilter.addAction(Intent.ACTION_SCREEN_OFF);
         screenIntentFilter.addAction(Intent.ACTION_USER_PRESENT);
-        registerReceiver(new ScreenBroadcastReceiver(), screenIntentFilter);
+        registerReceiver(new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                String action = intent.getAction();
+                switch (action) {
+                    case Intent.ACTION_SCREEN_OFF:
+                        sendScreenNotification();
+                        isScreenOff = true;
+                        break;
+                    case Intent.ACTION_USER_PRESENT:
+                        sendNotification();
+                        isScreenOff = false;
+                        break;
+                }
+                abortBroadcast();
+            }
+        }, screenIntentFilter);
 
         // Start timer
         timer = new Timer();
@@ -481,22 +478,18 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
-        switch (keyCode) {
-            case KeyEvent.KEYCODE_BACK:
-                if (webView.getVisibility() == View.VISIBLE) {
-                    if (webView.canGoBack()) {
-                        webView.goBack();
-                    } else {
-                        moveTaskToBack(false);
-                    }
-                } else if (player.getVisibility() == View.VISIBLE) {
-                    player.setVisibility(View.GONE);
-                    webView.setVisibility(View.VISIBLE);
+        if (keyCode == KeyEvent.KEYCODE_BACK) {
+            if (webView.getVisibility() == View.VISIBLE) {
+                if (webView.canGoBack()) {
+                    webView.goBack();
+                } else {
+                    moveTaskToBack(false);
                 }
-                return true;
-            case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
-                toggleState();
-                break;
+            } else if (player.getVisibility() == View.VISIBLE) {
+                player.setVisibility(View.GONE);
+                webView.setVisibility(View.VISIBLE);
+            }
+            return true;
         }
         return super.onKeyDown(keyCode, event);
     }
