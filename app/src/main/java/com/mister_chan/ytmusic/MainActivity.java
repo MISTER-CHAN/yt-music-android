@@ -204,13 +204,13 @@ public class MainActivity extends AppCompatActivity {
     private WindowManager windowManager;
 
     private boolean isNumeric(String s) {
-        return Pattern.compile("-?\\d+(\\.\\d+)?").matcher(s).find();
+        return Pattern.compile("^-?\\d+(\\.\\d+)?$").matcher(s).find();
     }
 
     private String isVideo(String url) {
-        Matcher m = Pattern.compile("(?<=v=)[-0-9A-Z_a-z]+").matcher(url);
+        Matcher m = Pattern.compile("^https?://(www|m)\\.youtube\\.com/.*[?&]v=(?<v>[-0-9A-Z_a-z]+)").matcher(url);
         if (m.find()) {
-            return m.group();
+            return m.group("v");
         }
         return null;
     }
@@ -284,6 +284,7 @@ public class MainActivity extends AppCompatActivity {
             public void onLoadResource(WebView view, String url) {
                 String v = isVideo(url);
                 if (v != null) {
+                    Log.d("url", url);
                     view.goBack();
                     player.loadUrl(url.replace("&pbj=1", "").replace("://m.", "://www."));
                     lastPosition = 0;
@@ -323,7 +324,7 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
-             // bReload.setVisibility(View.VISIBLE);
+                // bReload.setVisibility(View.VISIBLE);
                 super.onReceivedError(view, request, error);
             }
         });
