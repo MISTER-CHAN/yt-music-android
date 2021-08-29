@@ -284,7 +284,6 @@ public class MainActivity extends AppCompatActivity {
             public void onLoadResource(WebView view, String url) {
                 String v = isVideo(url);
                 if (v != null) {
-                    Log.d("url", url);
                     view.goBack();
                     player.loadUrl(url.replace("&pbj=1", "").replace("://m.", "://www."));
                     lastPosition = 0;
