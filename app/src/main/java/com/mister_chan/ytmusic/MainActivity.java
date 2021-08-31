@@ -62,6 +62,15 @@ public class MainActivity extends AppCompatActivity {
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
+                    player.loadUrl("javascript:" +
+                            "(function () {" +
+                            "    var $cross = document.getElementsByClassName(\"ytp-ad-overlay-close-container\")[0];" +
+                            "    var $skip = document.getElementsByClassName(\"ytp-ad-skip-button\")[0];" +
+                            "    if ($cross != undefined)" +
+                            "        $cross.click();" +
+                            "    if ($skip != undefined)" +
+                            "        $skip.click()" +
+                            "})()");
                     player.evaluateJavascript("" +
                                     "var player = " + PLAYER + ";" +
                                     "if (player != null)" +
@@ -424,6 +433,7 @@ public class MainActivity extends AppCompatActivity {
                             case View.VISIBLE:
                                 tvLyrics.setVisibility(View.GONE);
                                 break;
+                            case View.INVISIBLE:
                             case View.GONE:
                                 tvLyrics.setVisibility(View.VISIBLE);
                                 break;
