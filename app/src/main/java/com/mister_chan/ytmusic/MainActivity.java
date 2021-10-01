@@ -18,7 +18,6 @@ import android.os.Bundle;
 import android.os.IBinder;
 import android.support.v4.media.MediaMetadataCompat;
 import android.support.v4.media.session.MediaSessionCompat;
-import android.util.Log;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
@@ -35,7 +34,6 @@ import android.webkit.WebViewClient;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.NotificationCompat;
@@ -64,17 +62,6 @@ public class MainActivity extends AppCompatActivity {
                 public void run() {
                     player.loadUrl("javascript:" +
                             "var player = " + PLAYER + ";");
-                    player.loadUrl("javascript:" +
-                            "(function () {" +
-                            "    var $cross = document.getElementsByClassName(\"ytp-ad-overlay-close-container\")[0];" +
-                            "    var $skip = document.getElementsByClassName(\"ytp-ad-skip-button\")[0];" +
-                            "    if ($cross != undefined) {" +
-                            "        $cross.click();" +
-                            "    }" +
-                            "    if ($skip != undefined) {" +
-                            "        $skip.click();" +
-                            "    }" +
-                            "})()");
                     player.evaluateJavascript("" +
                                     "if (player != null)" +
                                     "    player.getCurrentTime()",
@@ -83,11 +70,11 @@ public class MainActivity extends AppCompatActivity {
                         public void onReceiveValue(String value) {
                             // value: current time in seconds
                             if (isNumeric(value)) {
-                                float f = Float.parseFloat(value);
-                                if (f > 0) {
+                                float currentTime = Float.parseFloat(value);
+                                if (currentTime > 0) {
 
                                     // Show lyrics
-                                    int centisec = (int) (f * 100) * 20 / 1000 * 1000 / 20;
+                                    int centisec = (int) (currentTime * 100) * 20 / 1000 * 1000 / 20;
                                     String line = lyrics[centisec];
                                     if (line != null && !lyricsLine.equals(line)) {
                                         lyricsLine = line;
@@ -111,14 +98,14 @@ public class MainActivity extends AppCompatActivity {
                                     }
                                     if (shouldSeekToLastPosition) {
                                         shouldSeekToLastPosition = false;
-                                        if (f < lastPosition) {
+                                        if (currentTime < lastPosition) {
                                             player.loadUrl("javascript:" +
                                                     "player.seekTo(" + lastPosition + ")");
                                         }
                                     } else if (skippings.size() > 0) {
                                         Skipping skipping = skippings.get(0);
                                         skippings.remove(0);
-                                        if (f >= skipping.from) {
+                                        if (currentTime >= skipping.from) {
                                             player.loadUrl("javascript:" +
                                                     "(function () {" +
                                                     "    var to = " + skipping.to + ";" +
@@ -148,11 +135,35 @@ public class MainActivity extends AppCompatActivity {
                                         player.loadUrl("javascript:" +
                                                 "player.unMute()");
                                     }
-                                    lastPosition = f;
+                                    lastPosition = currentTime;
                                 }
                             }
                         }
                     });
+                }
+            });
+        }
+    }
+
+    private class SkippingAdTimerTask extends TimerTask {
+        @Override
+        public void run() {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    player.loadUrl("javascript:" +
+                            "if (player != null) {" +
+                            "    (function () {" +
+                            "        var $cross = document.getElementsByClassName(\"ytp-ad-overlay-close-container\")[0];" +
+                            "        var $skip = document.getElementsByClassName(\"ytp-ad-skip-button\")[0];" +
+                            "        if ($cross != null) {" +
+                            "            $cross.click();" +
+                            "        }" +
+                            "        if ($skip != null) {" +
+                            "             $skip.click();" +
+                            "        }" +
+                            "    })()" +
+                            "}");
                 }
             });
         }
@@ -210,8 +221,8 @@ public class MainActivity extends AppCompatActivity {
     private String lyricsLine = YOUTUBE_MUSIC, nowPlaying = "", stylelessLyricsLine = YOUTUBE_MUSIC;
     private String[] lyrics;
     private TextView tvLyrics, tvTitle;
-    private Timer timer;
-    private TimerTask timerTask;
+    private Timer lyricsTimer, skippingAdTimer;
+    private TimerTask lyricsTimerTask, skippingAdTimerTask;
     private WebView webView;
     private WindowManager windowManager;
 
@@ -477,9 +488,12 @@ public class MainActivity extends AppCompatActivity {
         }, screenIntentFilter);
 
         // Start timer
-        timer = new Timer();
-        timerTask = new LyricsTimerTask();
-        timer.schedule(timerTask, 1000, 100);
+        lyricsTimer = new Timer();
+        lyricsTimerTask = new LyricsTimerTask();
+        lyricsTimer.schedule(lyricsTimerTask, 1000, 100);
+        skippingAdTimer = new Timer();
+        skippingAdTimerTask = new SkippingAdTimerTask();
+        skippingAdTimer.schedule(skippingAdTimerTask, 1000, 1000);
     }
 
     @Override
