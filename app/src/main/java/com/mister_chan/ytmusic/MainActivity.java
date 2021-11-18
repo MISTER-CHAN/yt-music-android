@@ -102,18 +102,19 @@ public class MainActivity extends AppCompatActivity {
                                             player.loadUrl("javascript:" +
                                                     "player.seekTo(" + lastPosition + ")");
                                         }
-                                    } else if (skippings.size() > 0) {
-                                        Skipping skipping = skippings.get(0);
-                                        skippings.remove(0);
-                                        if (currentTime >= skipping.from) {
-                                            player.loadUrl("javascript:" +
-                                                    "(function () {" +
-                                                    "    var to = " + skipping.to + ";" +
-                                                    "    if (to <= 0) {" +
-                                                    "        to = player.getDuration();" +
-                                                    "    }" +
-                                                    "    player.seekTo(to)" +
-                                                    "})()");
+                                    } else {
+                                        for (Skipping skipping : skippings) {
+                                            if (currentTime >= skipping.from) {
+                                                player.loadUrl("javascript:" +
+                                                        "(function () {" +
+                                                        "    var to = " + skipping.to + ";" +
+                                                        "    if (to <= 0) {" +
+                                                        "        to = player.getDuration();" +
+                                                        "    }" +
+                                                        "    player.seekTo(to)" +
+                                                        "})()");
+                                                break;
+                                            }
                                         }
                                     }
                                     if (shouldGetDuration) {
