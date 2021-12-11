@@ -87,6 +87,8 @@ public class MainActivity extends AppCompatActivity {
                                             player.loadUrl("javascript:" +
                                                     "player.seekTo(" + lastPosition + ")");
                                         }
+                                    } else if (jsAssignToSkippings != "") {
+                                        player.loadUrl(jsAssignToSkippings);
                                     }
                                     if (shouldGetDuration) {
                                         player.evaluateJavascript("player.getDuration()", new ValueCallback<String>() {
@@ -143,6 +145,11 @@ public class MainActivity extends AppCompatActivity {
             "    }" +
             "}, 100);";
 
+    private static final String JS_ASSIGN_TO_SKIPPINGS = "javascript:" +
+            "if (typeof skippings == \"undefined\") {" +
+            "    var skippings = [%s];" +
+            "}";
+
     private static final String JS_GET_CURRENT_TIME = "" +
             "if (player != null) {" +
             "    var currentTime = player.getCurrentTime();" +
@@ -151,7 +158,7 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String JS_SKIP = "javascript:" +
             "setInterval(function () {" +
-            "    for (var i = 0; i < skippings.length; ++i) {" +
+            "    for (let i = 0; i < skippings.length; ++i) {" +
             "        var skipping = skippings[i];" +
             "        if (currentTime >= skipping.from) {" +
             "            if (currentTime < skipping.to) {" +
@@ -167,8 +174,8 @@ public class MainActivity extends AppCompatActivity {
     private static final String JS_SKIP_AD = "javascript:" +
             "setInterval(function () {" +
             "    if (player != null) {" +
-            "        var $cross = document.getElementsByClassName(\"ytp-ad-overlay-close-container\")[0];" +
-            "        var $skip = document.getElementsByClassName(\"ytp-ad-skip-button\")[0];" +
+            "        let $cross = document.getElementsByClassName(\"ytp-ad-overlay-close-container\")[0];" +
+            "        let $skip = document.getElementsByClassName(\"ytp-ad-skip-button\")[0];" +
             "        if ($cross != null) {" +
             "            $cross.click();" +
             "        }" +
@@ -196,6 +203,15 @@ public class MainActivity extends AppCompatActivity {
     private MediaWebView player;
     NotificationCompat.Action lyricsAction, nextAction;
     private NotificationService notificationService;
+    String title = YOUTUBE_MUSIC;
+    private String lyricsLine = YOUTUBE_MUSIC, nowPlaying = "", jsAssignToSkippings = "", stylelessLyricsLine = YOUTUBE_MUSIC;
+    private String[] lyrics;
+    private TextView tvLyrics, tvTitle;
+    private Timer lyricsTimer;
+    private TimerTask lyricsTimerTask;
+    private WebView webView;
+    private WindowManager windowManager;
+
     private final ServiceConnection connection = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
@@ -212,14 +228,6 @@ public class MainActivity extends AppCompatActivity {
 
         }
     };
-    String title = YOUTUBE_MUSIC;
-    private String lyricsLine = YOUTUBE_MUSIC, nowPlaying = "", stylelessLyricsLine = YOUTUBE_MUSIC;
-    private String[] lyrics;
-    private TextView tvLyrics, tvTitle;
-    private Timer lyricsTimer;
-    private TimerTask lyricsTimerTask;
-    private WebView webView;
-    private WindowManager windowManager;
 
     private boolean isNumeric(String s) {
         return Pattern.compile("^-?\\d+(\\.\\d+)?$").matcher(s).find();
@@ -341,7 +349,6 @@ public class MainActivity extends AppCompatActivity {
                     view.loadUrl(JS_ASSIGN_TO_PLAYER);
                     view.loadUrl(JS_ADD_ON_STATE_CHANGE_LISTENER);
                     view.loadUrl(JS_SKIP_AD);
-                    readLyrics(v);
                     view.loadUrl(JS_SKIP);
                 }
             }
@@ -358,13 +365,13 @@ public class MainActivity extends AppCompatActivity {
                 String url = view.getUrl();
                 if (url.startsWith("https://www.youtube.com")) {
                     String v = isVideo(url);
-                    if (v == null) { // When loading feed
+                    if (v == null) { // Loads feed
                         view.goBack();
                         shouldSeekToLastPosition = true;
                         webView.loadUrl(url);
                         player.setVisibility(View.GONE);
                         webView.setVisibility(View.VISIBLE);
-                    } else if (!nowPlaying.equals(v)) { // When loading another video
+                    } else if (!nowPlaying.equals(v)) { // Loads another video
                         lastPosition = 0;
                         prepareNewVideo(v);
                     }
@@ -532,6 +539,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void prepareNewVideo(String v) {
+        readLyrics(v);
         nowPlaying = v;
         isPlaying = true;
     }
@@ -546,8 +554,8 @@ public class MainActivity extends AppCompatActivity {
         lyricsLine = YOUTUBE_MUSIC;
         stylelessLyricsLine = YOUTUBE_MUSIC;
         tvLyrics.setTextColor(Color.RED);
-        player.loadUrl("javascript:" +
-                "var skippings = [];");
+        jsAssignToSkippings = "";
+        StringBuilder skippings = new StringBuilder();
         try {
             BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(
                     "/sdcard/YTMusic/lyrics/" + v + ".lrc"),
@@ -571,14 +579,13 @@ public class MainActivity extends AppCompatActivity {
                 } else if ((matcher = Pattern.compile("\\[offset:(?<offset>.*)\\]").matcher(line)).find()) {
                     offset = Integer.parseInt(matcher.group("offset"));
                 } else if ((matcher = Pattern.compile("\\[skipping:(?<from>.*),(?<to>.*)\\]").matcher(line)).find()) {
-                    player.loadUrl("javascript:" +
-                            "skippings.push({" +
-                            "    from: " + matcher.group("from") + "," +
-                            "    to: " + matcher.group("to") + "" +
-                            "});");
+                    skippings.append(", {from: ").append(matcher.group("from")).append(", to: ").append(matcher.group("to")).append("}");
                 }
             }
             br.close();
+            if (!"".equals(skippings.toString())) {
+                jsAssignToSkippings = String.format(JS_ASSIGN_TO_SKIPPINGS, skippings.substring(2));
+            }
         } catch (FileNotFoundException e) {
             tvLyrics.setText(YOUTUBE_MUSIC);
             e.printStackTrace();
