@@ -561,7 +561,8 @@ public class MainActivity extends AppCompatActivity {
 
     private void prepareNewVideo(String v) {
         player.loadUrl("javascript: clearInterval(skippingTimer);");
-        player.loadUrl(JS_SET_NO_SKIPPINGS);
+        jsSetSkippings = JS_SET_NO_SKIPPINGS;
+        player.loadUrl(jsSetSkippings);
         readLyrics(v);
         nowPlaying = v;
         isPlaying = true;
@@ -579,7 +580,6 @@ public class MainActivity extends AppCompatActivity {
         lyricsLine = YOUTUBE_MUSIC;
         stylelessLyricsLine = YOUTUBE_MUSIC;
         tvLyrics.setTextColor(Color.RED);
-        jsSetSkippings = JS_SET_NO_SKIPPINGS;
         StringBuilder skippings = new StringBuilder();
         try {
             BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(
