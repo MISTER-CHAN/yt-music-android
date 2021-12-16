@@ -18,6 +18,7 @@ import android.os.Bundle;
 import android.os.IBinder;
 import android.support.v4.media.MediaMetadataCompat;
 import android.support.v4.media.session.MediaSessionCompat;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
@@ -45,6 +46,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
+import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.regex.Matcher;
@@ -87,8 +89,11 @@ public class MainActivity extends AppCompatActivity {
                                             player.loadUrl("javascript:" +
                                                     "player.seekTo(" + lastPosition + ")");
                                         }
-                                    } else if (jsAssignToSkippings != "") {
-                                        player.loadUrl(jsAssignToSkippings);
+                                    } else if (shouldSetSkippings) {
+                                        Log.d("s", jsSetSkippings);
+                                        shouldSetSkippings = false;
+                                        player.loadUrl(jsSetSkippings);
+                                        player.loadUrl(JS_SKIP);
                                     }
                                     if (shouldGetDuration) {
                                         player.evaluateJavascript("player.getDuration()", new ValueCallback<String>() {
@@ -128,7 +133,7 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String JS_ADD_ON_STATE_CHANGE_LISTENER = "javascript:" +
             "var addOnStateChangeListenerTimer = setInterval(function () {" +
-            "    if (player != null) {" +
+            "    if (typeof player != \"undefined\" && player != null) {" +
             "        clearInterval(addOnStateChangeListenerTimer);" +
             "        player.addEventListener(\"onStateChange\", function (data) {" +
             "            mainActivity.onStateChange(data)" +
@@ -136,44 +141,50 @@ public class MainActivity extends AppCompatActivity {
             "    }" +
             "}, 100);";
 
-    private static final String JS_ASSIGN_TO_PLAYER = "javascript:" +
-            "var player;" +
-            "var assigningPlayerTimer = setInterval(function () {" +
-            "    player = " + PLAYER + ";" +
-            "    if (player != null) {" +
-            "        clearInterval(assigningPlayerTimer);" +
-            "    }" +
-            "}, 100);";
-
-    private static final String JS_ASSIGN_TO_SKIPPINGS = "javascript:" +
-            "if (typeof skippings == \"undefined\") {" +
-            "    var skippings = [%s];" +
-            "}";
-
     private static final String JS_GET_CURRENT_TIME = "" +
-            "if (player != null) {" +
+            "if (typeof player != \"undefined\" && player != null) {" +
             "    var currentTime = player.getCurrentTime();" +
             "    currentTime" +
             "}";
 
+    private static final String JS_NEXT_VIDEO = "javascript:" + PLAYER + ".seekTo(" + PLAYER + ".getDuration())";
+    private static final String JS_PAUSE_VIDEO = "javascript:" + PLAYER + ".pauseVideo()";
+    private static final String JS_PLAY_VIDEO = "javascript:" + PLAYER + ".playVideo()";
+
+    private static final String JS_SET_PLAYER = "javascript:" +
+            "var player;" +
+            "var settingPlayerTimer = setInterval(function () {" +
+            "    player = " + PLAYER + ";" +
+            "    if (player != null) {" +
+            "        clearInterval(settingPlayerTimer);" +
+            "    }" +
+            "}, 100);";
+
+    private static final String JS_SET_SKIPPINGS = "javascript:" +
+            "var skippings = [%s];";
+
+    private static final String JS_SET_NO_SKIPPINGS = String.format(JS_SET_SKIPPINGS, "");
+
     private static final String JS_SKIP = "javascript:" +
-            "setInterval(function () {" +
-            "    for (let i = 0; i < skippings.length; ++i) {" +
-            "        var skipping = skippings[i];" +
-            "        if (currentTime >= skipping.from) {" +
-            "            if (currentTime < skipping.to) {" +
-            "                player.seekTo(skipping.to);" +
-            "            } else if (skipping.to <= 0) {" +
-            "                player.seekTo(player.getDuration());" +
+            "var skippingTimer = setInterval(function () {" +
+            "    if (typeof skippings != \"undefined\") {" +
+            "        for (let i = 0; i < skippings.length; ++i) {" +
+            "            let skipping = skippings[i];" +
+            "            if (currentTime >= skipping.from) {" +
+            "                if (currentTime < skipping.to) {" +
+            "                    player.seekTo(skipping.to);" +
+            "                } else if (skipping.to <= 0) {" +
+            "                    player.seekTo(player.getDuration());" +
+            "                }" +
             "            }" +
+            "            return;" +
             "        }" +
-            "        break;" +
             "    }" +
             "}, 100);";
 
     private static final String JS_SKIP_AD = "javascript:" +
             "setInterval(function () {" +
-            "    if (player != null) {" +
+            "    if (typeof player != \"undefined\" && player != null) {" +
             "        let $cross = document.getElementsByClassName(\"ytp-ad-overlay-close-container\")[0];" +
             "        let $skip = document.getElementsByClassName(\"ytp-ad-skip-button\")[0];" +
             "        if ($cross != null) {" +
@@ -185,15 +196,23 @@ public class MainActivity extends AppCompatActivity {
             "    }" +
             "}, 100);";
 
+    private static final String JS_TOGGLE_STATE = "javascript:" +
+            "if (typeof player != \"undefined\" && player != null) {" +
+            "    if (player.getPlayerState() == " + PLAYER_STATE_PLAYING + ")" +
+            "        player.pauseVideo();" +
+            "    else" +
+            "        player.playVideo()" +
+            "}";
+
     private static final String JS_UNMUTE = "javascript:" +
             "var unmutingTimer = setInterval(function () {" +
-            "    if (player != null) {" +
+            "    if (typeof player != \"undefined\" && player != null) {" +
             "        clearInterval(unmutingTimer);" +
             "        player.unMute();" +
             "    }" +
             "}, 100);";
 
-    private boolean isPlaying = false, isScreenOff = false, shouldGetDuration = false, shouldSeekToLastPosition = false;
+    private boolean isPlaying = false, isScreenOff = false, shouldSetSkippings = false, shouldGetDuration = false, shouldSeekToLastPosition = false;
     private Button bPlayPause, bReload;
     float lastPosition = 0;
     int playerState = 0;
@@ -204,7 +223,10 @@ public class MainActivity extends AppCompatActivity {
     NotificationCompat.Action lyricsAction, nextAction;
     private NotificationService notificationService;
     String title = YOUTUBE_MUSIC;
-    private String lyricsLine = YOUTUBE_MUSIC, nowPlaying = "", jsAssignToSkippings = "", stylelessLyricsLine = YOUTUBE_MUSIC;
+    private String jsSetSkippings = JS_SET_NO_SKIPPINGS;
+    private String lyricsLine = YOUTUBE_MUSIC;
+    private String nowPlaying = "";
+    private String stylelessLyricsLine = YOUTUBE_MUSIC;
     private String[] lyrics;
     private TextView tvLyrics, tvTitle;
     private Timer lyricsTimer;
@@ -346,10 +368,9 @@ public class MainActivity extends AppCompatActivity {
                 super.onPageStarted(view, url, favicon);
                 String v = isVideo(url);
                 if (v != null) {
-                    view.loadUrl(JS_ASSIGN_TO_PLAYER);
+                    view.loadUrl(JS_SET_PLAYER);
                     view.loadUrl(JS_ADD_ON_STATE_CHANGE_LISTENER);
                     view.loadUrl(JS_SKIP_AD);
-                    view.loadUrl(JS_SKIP);
                 }
             }
 
@@ -442,13 +463,13 @@ public class MainActivity extends AppCompatActivity {
                 String action = intent.getAction();
                 switch (action) {
                     case ACTION_PLAY:
-                        player.loadUrl("javascript:" + PLAYER + ".playVideo()");
+                        player.loadUrl(JS_PLAY_VIDEO);
                         break;
                     case ACTION_PAUSE:
-                        player.loadUrl("javascript:" + PLAYER + ".pauseVideo()");
+                        player.loadUrl(JS_PAUSE_VIDEO);
                         break;
                     case ACTION_NEXT:
-                        player.loadUrl("javascript:" + PLAYER + ".seekTo(" + PLAYER + ".getDuration())");
+                        player.loadUrl(JS_NEXT_VIDEO);
                         break;
                     case ACTION_LYRICS:
                         int visibility = tvLyrics.getVisibility();
@@ -539,14 +560,18 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void prepareNewVideo(String v) {
+        player.loadUrl("javascript: clearInterval(skippingTimer);");
+        player.loadUrl(JS_SET_NO_SKIPPINGS);
         readLyrics(v);
         nowPlaying = v;
         isPlaying = true;
+        player.loadUrl("javascript: player.seekTo(0);");
     }
 
     private void prepareTodoList() {
         shouldGetDuration = true;
         shouldSeekToLastPosition = false;
+        shouldSetSkippings = true;
     }
 
     private void readLyrics(String v) {
@@ -554,11 +579,11 @@ public class MainActivity extends AppCompatActivity {
         lyricsLine = YOUTUBE_MUSIC;
         stylelessLyricsLine = YOUTUBE_MUSIC;
         tvLyrics.setTextColor(Color.RED);
-        jsAssignToSkippings = "";
+        jsSetSkippings = JS_SET_NO_SKIPPINGS;
         StringBuilder skippings = new StringBuilder();
         try {
             BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(
-                    "/sdcard/YTMusic/lyrics/" + v + ".lrc"),
+                    "/sdcard/" + "YTMusic/lyrics/" + v + ".lrc"),
                     StandardCharsets.UTF_8));
             String line;
             int offset = 0;
@@ -584,7 +609,7 @@ public class MainActivity extends AppCompatActivity {
             }
             br.close();
             if (!"".equals(skippings.toString())) {
-                jsAssignToSkippings = String.format(JS_ASSIGN_TO_SKIPPINGS, skippings.substring(2));
+                jsSetSkippings = String.format(JS_SET_SKIPPINGS, skippings.substring(2));
             }
         } catch (FileNotFoundException e) {
             tvLyrics.setText(YOUTUBE_MUSIC);
@@ -601,12 +626,12 @@ public class MainActivity extends AppCompatActivity {
     private void sendScreenNotification() {
         Intent intent = new Intent();
         NotificationCompat.Action playPauseAction;
-        if (playerState == MainActivity.PLAYER_STATE_PLAYING) {
-            intent.setAction(MainActivity.ACTION_PAUSE);
+        if (playerState == PLAYER_STATE_PLAYING) {
+            intent.setAction(ACTION_PAUSE);
             PendingIntent pendingIntent = PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
             playPauseAction = new NotificationCompat.Action.Builder(R.drawable.ic_pause, "Pause", pendingIntent).build();
         } else {
-            intent.setAction(MainActivity.ACTION_PLAY);
+            intent.setAction(ACTION_PLAY);
             PendingIntent pendingIntent = PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
             playPauseAction = new NotificationCompat.Action.Builder(R.drawable.ic_play, "Play", pendingIntent).build();
         }
@@ -651,13 +676,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void toggleState() {
-        player.loadUrl("javascript:" +
-                "var player = " + PLAYER + ";" +
-                "if (player != null) {" +
-                "    if (player.getPlayerState() == 1)" +
-                "        player.pauseVideo();" +
-                "    else" +
-                "        player.playVideo()" +
-                "}");
+        player.loadUrl(JS_TOGGLE_STATE);
     }
 }
