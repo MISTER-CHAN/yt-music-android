@@ -42,6 +42,7 @@ import androidx.core.app.NotificationCompat;
 import java.io.BufferedReader;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
@@ -581,10 +582,7 @@ public class MainActivity extends AppCompatActivity {
         stylelessLyricsLine = YOUTUBE_MUSIC;
         tvLyrics.setTextColor(Color.RED);
         StringBuilder skippings = new StringBuilder();
-        try {
-            BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(
-                    "/sdcard/" + "YTMusic/lyrics/" + v + ".lrc"),
-                    StandardCharsets.UTF_8));
+        try (BufferedReader br = new BufferedReader(new FileReader("/sdcard/" + "YTMusic/lyrics/" + v + ".lrc"))) {
             String line;
             int offset = 0;
             while ((line = br.readLine()) != null) {
@@ -607,7 +605,6 @@ public class MainActivity extends AppCompatActivity {
                     skippings.append(", {from: ").append(matcher.group("from")).append(", to: ").append(matcher.group("to")).append("}");
                 }
             }
-            br.close();
             if (!"".equals(skippings.toString())) {
                 jsSetSkippings = String.format(JS_SET_SKIPPINGS, skippings.substring(2));
             }
