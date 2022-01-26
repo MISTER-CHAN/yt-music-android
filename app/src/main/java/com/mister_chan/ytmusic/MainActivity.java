@@ -18,7 +18,6 @@ import android.os.Bundle;
 import android.os.IBinder;
 import android.support.v4.media.MediaMetadataCompat;
 import android.support.v4.media.session.MediaSessionCompat;
-import android.util.Log;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
@@ -40,14 +39,10 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.NotificationCompat;
 
 import java.io.BufferedReader;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
+import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
 import java.util.Locale;
-import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.regex.Matcher;
@@ -55,82 +50,24 @@ import java.util.regex.Pattern;
 
 public class MainActivity extends AppCompatActivity {
 
-    private class LyricsTimerTask extends TimerTask {
-        @Override
-        public void run() {
-            runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    player.evaluateJavascript(JS_GET_CURRENT_TIME, new ValueCallback<String>() {
-                        @Override
-                        public void onReceiveValue(String value) {
-                            // value: current time in seconds
-                            if (isNumeric(value)) {
-                                float currentTime = Float.parseFloat(value);
-                                if (currentTime > 0) {
+    private static final int MAX_NUM_OF_LYRICS_LINES = 42 * 1024; // Range: 00:00.00 ~ 7:10.07
 
-                                    // Show lyrics
-                                    int centisec = (int) (currentTime * 100) * 20 / 1000 * 1000 / 20;
-                                    String line = lyrics[centisec];
-                                    if (line != null && !lyricsLine.equals(line)) {
-                                        lyricsLine = line;
-                                        line = stylizeLyrics(line);
-                                        line = line.toUpperCase(Locale.ROOT);
-                                        stylelessLyricsLine = line;
-                                        tvLyrics.setText(line);
-                                        if (isScreenOff) {
-                                            sendScreenNotification();
-                                        }
-                                    }
-
-                                    // Should-dos
-                                    if (shouldSeekToLastPosition) {
-                                        shouldSeekToLastPosition = false;
-                                        if (currentTime < lastPosition) {
-                                            player.loadUrl("javascript:" +
-                                                    "player.seekTo(" + lastPosition + ")");
-                                        }
-                                    } else if (shouldSetSkippings) {
-                                        Log.d("s", jsSetSkippings);
-                                        shouldSetSkippings = false;
-                                        player.loadUrl(jsSetSkippings);
-                                        player.loadUrl(JS_SKIP);
-                                    }
-                                    if (shouldGetDuration) {
-                                        player.evaluateJavascript("player.getDuration()", new ValueCallback<String>() {
-                                            @Override
-                                            public void onReceiveValue(String value) {
-                                                if (!"null".equals(value)) {
-                                                    shouldGetDuration = false;
-                                                    duration = (long) Float.parseFloat(value);
-                                                    if (!isScreenOff) {
-                                                        sendNotification();
-                                                    }
-                                                }
-                                            }
-                                        });
-                                    }
-                                    lastPosition = currentTime;
-                                }
-                            }
-                        }
-                    });
-                }
-            });
-        }
-    }
-
-    static final int PLAYER_STATE_UNSTARTED = -1,
+    static final int
+            PLAYER_STATE_UNSTARTED = -1,
             PLAYER_STATE_ENDED = 0,
             PLAYER_STATE_PLAYING = 1,
             PLAYER_STATE_PAUSED = 2,
             PLAYER_STATE_BUFFERING = 3,
             PLAYER_STATE_CUED = 5;
-    static final String ACTION_LYRICS = "com.mister_chan.ytmusic.action.LYRICS",
+
+    static final String
+            ACTION_LYRICS = "com.mister_chan.ytmusic.action.LYRICS",
             ACTION_NEXT = "com.mister_chan.ytmusic.action.NEXT",
             ACTION_PAUSE = "com.mister_chan.ytmusic.action.PAUSE",
             ACTION_PLAY = "com.mister_chan.ytmusic.action.PLAY";
-    private static final String PLAYER = "document.getElementById(\"movie_player\")", YOUTUBE_MUSIC = "YouTube Music";
+
+    private static final String PLAYER = "document.getElementById(\"movie_player\")";
+    private static final String YOUTUBE_MUSIC = "YouTube Music";
 
     private static final String JS_ADD_ON_STATE_CHANGE_LISTENER = "javascript:" +
             "var addOnStateChangeListenerTimer = setInterval(function () {" +
@@ -161,9 +98,7 @@ public class MainActivity extends AppCompatActivity {
             "    }" +
             "}, 100);";
 
-    private static final String JS_SET_SKIPPINGS = "javascript:" +
-            "var skippings = [%s];";
-
+    private static final String JS_SET_SKIPPINGS = "javascript: var skippings = [%s];";
     private static final String JS_SET_NO_SKIPPINGS = String.format(JS_SET_SKIPPINGS, "");
 
     private static final String JS_SKIP = "javascript:" +
@@ -213,12 +148,16 @@ public class MainActivity extends AppCompatActivity {
             "    }" +
             "}, 100);";
 
-    private boolean isPlaying = false, isScreenOff = false, shouldSetSkippings = false, shouldGetDuration = false, shouldSeekToLastPosition = false;
+    private boolean isPlaying = false;
+    private boolean isScreenOff = false;
+    private boolean shouldSetSkippings = false;
+    private boolean shouldGetDuration = false;
+    private boolean shouldSeekToLastPosition = false;
     private Button bPlayPause, bReload;
-    float lastPosition = 0;
+    float lastPosition = 0F;
     int playerState = 0;
     private LinearLayout llWebView;
-    long duration = 0;
+    long duration = 0L;
     MediaSessionCompat mediaSession;
     private MediaWebView player;
     NotificationCompat.Action lyricsAction, nextAction;
@@ -252,12 +191,69 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
-    private boolean isNumeric(String s) {
-        return Pattern.compile("^-?\\d+(\\.\\d+)?$").matcher(s).find();
+    private class LyricsTimerTask extends TimerTask {
+
+        @Override
+        public void run() {
+            runOnUiThread(() -> player.evaluateJavascript(JS_GET_CURRENT_TIME, value -> {
+                // value - current time in seconds
+                if ("null".equals(value)) {
+                    return;
+                }
+                float currentTime = Float.parseFloat(value);
+                if (currentTime <= 0) {
+                    return;
+                }
+
+                // Show lyrics
+                int centiseconds = (int) (currentTime * 100) * 20 / 1000 * 1000 / 20;
+                String line = lyrics[centiseconds];
+                if (line != null && !lyricsLine.equals(line)) {
+                    lyricsLine = line;
+                    line = stylizeLyrics(line);
+                    line = line.toUpperCase(Locale.ROOT);
+                    stylelessLyricsLine = line;
+                    tvLyrics.setText(line);
+                    if (isScreenOff) {
+                        sendScreenNotification();
+                    }
+                }
+
+                // Should-dos
+                if (shouldSeekToLastPosition) {
+                    shouldSeekToLastPosition = false;
+                    if (currentTime < lastPosition) {
+                        player.loadUrl("javascript:" +
+                                "player.seekTo(" + lastPosition + ")");
+                    }
+                } else if (shouldSetSkippings) {
+                    shouldSetSkippings = false;
+                    player.loadUrl(jsSetSkippings);
+                    player.loadUrl(JS_SKIP);
+                }
+                if (shouldGetDuration) {
+                    player.evaluateJavascript("player.getDuration()", new ValueCallback<String>() {
+                        @Override
+                        public void onReceiveValue(String value) {
+                            if ("null".equals(value)) {
+                                return;
+                            }
+                            shouldGetDuration = false;
+                            duration = (long) Float.parseFloat(value);
+                            if (!isScreenOff) {
+                                sendNotification();
+                            }
+                        }
+                    });
+                }
+
+                lastPosition = currentTime;
+            }));
+        }
     }
 
     private String isVideo(String url) {
-        Matcher m = Pattern.compile("^https?://(www|m)\\.youtube\\.com/.*[?&]v=(?<v>[-0-9A-Z_a-z]+)").matcher(url);
+        Matcher m = Pattern.compile("^https?://(?:www|m)\\.youtube\\.com/(?:\\?|.*&)v=(?<v>[-0-9A-Z_a-z]+)").matcher(url);
         if (m.find()) {
             return m.group("v");
         }
@@ -414,7 +410,7 @@ public class MainActivity extends AppCompatActivity {
         webView.loadUrl("https://m.youtube.com");
 
         // Initial lyrics window
-        windowManager = (WindowManager)getSystemService(WINDOW_SERVICE);
+        windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
         WindowManager.LayoutParams wmlp = new WindowManager.LayoutParams();
         wmlp.width = WindowManager.LayoutParams.MATCH_PARENT;
         wmlp.height = WindowManager.LayoutParams.WRAP_CONTENT;
@@ -577,12 +573,17 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void readLyrics(String v) {
-        lyrics = new String[0x20000];
+        lyrics = new String[MAX_NUM_OF_LYRICS_LINES];
         lyricsLine = YOUTUBE_MUSIC;
         stylelessLyricsLine = YOUTUBE_MUSIC;
         tvLyrics.setTextColor(Color.RED);
         StringBuilder skippings = new StringBuilder();
-        try (BufferedReader br = new BufferedReader(new FileReader("/sdcard/" + "YTMusic/lyrics/" + v + ".lrc"))) {
+        File file = new File("/sdcard" + "/YTMusic/lyrics/" + v + ".lrc");
+        if (!file.exists()) {
+            tvLyrics.setText(YOUTUBE_MUSIC);
+            return;
+        }
+        try (BufferedReader br = new BufferedReader(new FileReader(file))) {
             String line;
             int offset = 0;
             while ((line = br.readLine()) != null) {
@@ -591,11 +592,13 @@ public class MainActivity extends AppCompatActivity {
                         "\\[(?<min>\\d{2}):(?<sec>\\d{2})\\.(?<centisec>\\d{2})\\](?:\\[\\d{2}:\\d{2}\\.\\d{2}\\])*(?<lrc>[^\\[\\]]+)$")
                         .matcher(line)).find()) {
                     for (int i = 0; matcher.find(i); i += 10) {
-                        lyrics[Integer.parseInt(matcher.group("min")) * 6000
+                        int centiseconds = Integer.parseInt(matcher.group("min")) * 6000
                                 + Integer.parseInt(matcher.group("sec")) * 100
                                 + Integer.parseInt(matcher.group("centisec"))
-                                + offset / 10] =
-                                matcher.group("lrc");
+                                + offset / 10;
+                        if (centiseconds < MAX_NUM_OF_LYRICS_LINES) {
+                            lyrics[centiseconds] = matcher.group("lrc");
+                        }
                     }
                 } else if ((matcher = Pattern.compile("\\[ti:(?<ti>.*)\\]").matcher(line)).find()) {
                     tvLyrics.setText(stylizeLyrics(matcher.group("ti")).toUpperCase(Locale.ROOT));
@@ -608,9 +611,6 @@ public class MainActivity extends AppCompatActivity {
             if (!"".equals(skippings.toString())) {
                 jsSetSkippings = String.format(JS_SET_SKIPPINGS, skippings.substring(2));
             }
-        } catch (FileNotFoundException e) {
-            tvLyrics.setText(YOUTUBE_MUSIC);
-            e.printStackTrace();
         } catch (IOException e) {
             e.printStackTrace();
         }
