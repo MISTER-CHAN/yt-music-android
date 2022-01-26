@@ -207,6 +207,9 @@ public class MainActivity extends AppCompatActivity {
 
                 // Show lyrics
                 int centiseconds = (int) (currentTime * 100) * 20 / 1000 * 1000 / 20;
+                if (centiseconds >= MAX_NUM_OF_LYRICS_LINES) {
+                    return;
+                }
                 String line = lyrics[centiseconds];
                 if (line != null && !lyricsLine.equals(line)) {
                     lyricsLine = line;
@@ -253,7 +256,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private String isVideo(String url) {
-        Matcher m = Pattern.compile("^https?://(?:www|m)\\.youtube\\.com/(?:\\?|.*&)v=(?<v>[-0-9A-Z_a-z]+)").matcher(url);
+        Matcher m = Pattern.compile("^https?://(?:www|m)\\.youtube\\.com/.*[?&]v=(?<v>[-0-9A-Z_a-z]+)").matcher(url);
         if (m.find()) {
             return m.group("v");
         }
