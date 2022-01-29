@@ -42,7 +42,9 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.regex.Matcher;
@@ -148,6 +150,12 @@ public class MainActivity extends AppCompatActivity {
             "    }" +
             "}, 100);";
 
+    private static final Map<String, Integer> colorMap = new HashMap<String, Integer>() {{
+        put("RED", Color.RED);
+        put("GREEN", Color.GREEN);
+        put("BLUE", Color.BLUE);
+    }};
+
     private boolean isPlaying = false;
     private boolean isScreenOff = false;
     private boolean shouldSetSkippings = false;
@@ -156,7 +164,7 @@ public class MainActivity extends AppCompatActivity {
     private Button bPlayPause, bReload;
     float lastPosition = 0F;
     int playerState = 0;
-    private LinearLayout llWebView;
+    private LinearLayout llCustom, llFullScreen, llWebView;
     long duration = 0L;
     MediaSessionCompat mediaSession;
     private MediaWebView player;
@@ -171,6 +179,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView tvLyrics, tvTitle;
     private Timer lyricsTimer;
     private TimerTask lyricsTimerTask;
+    private View frontView;
     private WebView webView;
     private WindowManager windowManager;
 
@@ -186,9 +195,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         @Override
-        public void onServiceDisconnected(ComponentName name) {
-
-        }
+        public void onServiceDisconnected(ComponentName name) {}
     };
 
     private class LyricsTimerTask extends TimerTask {
@@ -255,6 +262,14 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private synchronized void bringToFront(View view) {
+        webView.setVisibility(View.GONE);
+        player.setVisibility(View.GONE);
+        llFullScreen.setVisibility(View.GONE);
+        view.setVisibility(View.VISIBLE);
+        frontView = view;
+    }
+
     private String isVideo(String url) {
         Matcher m = Pattern.compile("^https?://(?:www|m)\\.youtube\\.com/.*[?&]v=(?<v>[-0-9A-Z_a-z]+)").matcher(url);
         if (m.find()) {
@@ -272,14 +287,14 @@ public class MainActivity extends AppCompatActivity {
         wv.setLayoutParams(lp);
         WebSettings ws = wv.getSettings();
         ws.setAllowFileAccess(true);
-        ws.setAppCacheEnabled(true);
         ws.setBlockNetworkImage(true);
         ws.setCacheMode(WebSettings.LOAD_CACHE_ELSE_NETWORK);
         ws.setDatabaseEnabled(true);
         ws.setDomStorageEnabled(true);
         ws.setJavaScriptEnabled(true);
-        ws.setRenderPriority(WebSettings.RenderPriority.HIGH);
+        ws.setLoadWithOverviewMode(true);
         ws.setSupportMultipleWindows(true);
+        ws.setUseWideViewPort(true);
     }
 
     @SuppressLint({"RemoteViewLayout", "JavascriptInterface", "InvalidWakeLockTag"})
@@ -291,6 +306,8 @@ public class MainActivity extends AppCompatActivity {
         bPlayPause = findViewById(R.id.b_play_pause);
         bReload = findViewById(R.id.b_reload);
         llWebView = findViewById(R.id.ll_webview);
+        llCustom = findViewById(R.id.ll_custom);
+        llFullScreen = findViewById(R.id.ll_full_screen);
         tvTitle = findViewById(R.id.tv_title);
 
         // Initial views
@@ -311,9 +328,8 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.ll_title).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                if (isPlaying) {
-                    webView.setVisibility(View.GONE);
-                    player.setVisibility(View.VISIBLE);
+                if (isPlaying && frontView == webView) {
+                    bringToFront(player);
                 }
             }
         });
@@ -337,8 +353,7 @@ public class MainActivity extends AppCompatActivity {
                     lastPosition = 0;
                     prepareNewVideo(v);
                     prepareTodoList();
-                    webView.setVisibility(View.GONE);
-                    player.setVisibility(View.VISIBLE);
+                    bringToFront(player);
                 }
                 super.onLoadResource(view, url);
             }
@@ -390,8 +405,7 @@ public class MainActivity extends AppCompatActivity {
                         view.goBack();
                         shouldSeekToLastPosition = true;
                         webView.loadUrl(url);
-                        player.setVisibility(View.GONE);
-                        webView.setVisibility(View.VISIBLE);
+                        bringToFront(webView);
                     } else if (!nowPlaying.equals(v)) { // Loads another video
                         lastPosition = 0;
                         prepareNewVideo(v);
@@ -408,8 +422,22 @@ public class MainActivity extends AppCompatActivity {
                 }
                 super.onReceivedTitle(view, title);
             }
+
+            @Override
+            public void onHideCustomView() {
+                super.onHideCustomView();
+                llCustom.removeAllViews();
+                bringToFront(player);
+            }
+
+            @Override
+            public void onShowCustomView(View view, CustomViewCallback callback) {
+                super.onShowCustomView(view, callback);
+                llCustom.addView(view);
+                bringToFront(llFullScreen);
+            }
         });
-        player.setVisibility(View.GONE);
+        bringToFront(webView);
         webView.loadUrl("https://m.youtube.com");
 
         // Initial lyrics window
@@ -526,6 +554,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         stopService(new Intent(this, NotificationService.class));
+        lyricsTimer.cancel();
         super.onDestroy();
         android.os.Process.killProcess(android.os.Process.myPid());
     }
@@ -533,15 +562,14 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (keyCode == KeyEvent.KEYCODE_BACK) {
-            if (webView.getVisibility() == View.VISIBLE) {
+            if (frontView == webView) {
                 if (webView.canGoBack()) {
                     webView.goBack();
                 } else {
                     moveTaskToBack(false);
                 }
-            } else if (player.getVisibility() == View.VISIBLE) {
-                player.setVisibility(View.GONE);
-                webView.setVisibility(View.VISIBLE);
+            } else if (frontView == player) {
+                bringToFront(webView);
             }
             return true;
         }
@@ -639,31 +667,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setLyricsStyle(String style) {
-        switch (style) {
-            case "BLACK":
-                tvLyrics.setTextColor(Color.BLACK);
-                break;
-            case "BLUE":
-                tvLyrics.setTextColor(Color.BLUE);
-                break;
-            case "GREEN":
-                tvLyrics.setTextColor(Color.GREEN);
-                break;
-            case "CYAN":
-                tvLyrics.setTextColor(Color.CYAN);
-                break;
-            case "RED":
-                tvLyrics.setTextColor(Color.RED);
-                break;
-            case "MAGENTA":
-                tvLyrics.setTextColor(Color.MAGENTA);
-                break;
-            case "YELLOW":
-                tvLyrics.setTextColor(Color.YELLOW);
-                break;
-            case "WHITE":
-                tvLyrics.setTextColor(Color.WHITE);
-                break;
+        if (colorMap.containsKey(style)) {
+            tvLyrics.setTextColor(colorMap.get(style));
         }
     }
 
