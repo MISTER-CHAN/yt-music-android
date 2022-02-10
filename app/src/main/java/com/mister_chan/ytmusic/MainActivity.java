@@ -665,7 +665,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void readLyrics(String v) {
         lyrics = new LyricsLine[0];
-        List<LyricsLine> lyricsLineMap = new ArrayList<>();
+        List<LyricsLine> lyricsLinesMap = new ArrayList<>();
         lyricsLinePure = YOUTUBE_MUSIC;
         tvFloatingLyrics.setTextColor(Color.RED);
         indexOfNextLyricsLine = 0;
@@ -689,7 +689,7 @@ public class MainActivity extends AppCompatActivity {
                                 + Float.parseFloat(matcher.group("sec"))
                                 + Float.parseFloat(matcher.group("centisec")) * .01F
                                 + offset * .001F;
-                        lyricsLineMap.add(new LyricsLine(time, matcher.group("lrc")));
+                        lyricsLinesMap.add(new LyricsLine(time, matcher.group("lrc")));
                     }
                 } else if ((matcher = Pattern.compile("\\[ti:(?<ti>.*)\\]").matcher(line)).find()) {
                     tvFloatingLyrics.setText(stylizeLyrics(matcher.group("ti")).toUpperCase(Locale.ROOT));
@@ -699,9 +699,9 @@ public class MainActivity extends AppCompatActivity {
                     skippings.append(", {from: ").append(matcher.group("from")).append(", to: ").append(matcher.group("to")).append("}");
                 }
             }
-            if (!lyricsLineMap.isEmpty()) {
-                lyricsLineMap.sort(Comparator.comparingDouble(l -> l.time));
-                lyrics = lyricsLineMap.toArray(lyrics);
+            if (!lyricsLinesMap.isEmpty()) {
+                lyricsLinesMap.sort(Comparator.comparingDouble(l -> l.time));
+                lyrics = lyricsLinesMap.toArray(lyrics);
                 nextLyricsLineLine = lyrics[0];
                 llLyricsLines = new LinearLayout[lyrics.length];
                 for (int i = 0; i < lyrics.length; ++i) {
