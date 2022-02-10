@@ -40,7 +40,6 @@ import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.NotificationCompat;
-import androidx.fragment.app.FragmentActivity;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -195,7 +194,7 @@ public class MainActivity extends AppCompatActivity {
     private LinearLayout llWebView;
     long duration = 0L;
     private LyricsLine[] lyrics;
-    private LyricsLine nextLyricsLineLine;
+    private LyricsLine nextLyricsLine;
     MediaSessionCompat mediaSession;
     private MediaWebView player;
     NotificationCompat.Action lyricsAction, nextAction;
@@ -259,10 +258,10 @@ public class MainActivity extends AppCompatActivity {
                             }
                         }
                         indexOfNextLyricsLine = later;
-                        nextLyricsLineLine = lyrics[indexOfNextLyricsLine];
+                        nextLyricsLine = lyrics[indexOfNextLyricsLine];
                     }
-                    if (currentTime >= nextLyricsLineLine.time) {
-                        String line = nextLyricsLineLine.lyrics;
+                    if (currentTime >= nextLyricsLine.time) {
+                        String line = nextLyricsLine.lyrics;
                         line = stylizeLyrics(line);
                         line = line.toUpperCase(Locale.ROOT);
                         lyricsLinePure = line;
@@ -272,9 +271,9 @@ public class MainActivity extends AppCompatActivity {
                             sendScreenNotification();
                         }
                         if (++indexOfNextLyricsLine < lyrics.length) {
-                            nextLyricsLineLine = lyrics[indexOfNextLyricsLine];
+                            nextLyricsLine = lyrics[indexOfNextLyricsLine];
                         } else {
-                            nextLyricsLineLine = new LyricsLine(Integer.MAX_VALUE, null);
+                            nextLyricsLine = new LyricsLine(Integer.MAX_VALUE, null);
                         }
                     }
                 }
@@ -665,11 +664,11 @@ public class MainActivity extends AppCompatActivity {
 
     private void readLyrics(String v) {
         lyrics = new LyricsLine[0];
-        List<LyricsLine> lyricsLinesMap = new ArrayList<>();
+        List<LyricsLine> lyricsMap = new ArrayList<>();
         lyricsLinePure = YOUTUBE_MUSIC;
         tvFloatingLyrics.setTextColor(Color.RED);
         indexOfNextLyricsLine = 0;
-        nextLyricsLineLine = new LyricsLine(0, "");
+        nextLyricsLine = new LyricsLine(0, "");
         llLyrics.removeAllViews();
         llLyricsLines = new LinearLayout[0];
         StringBuilder skippings = new StringBuilder();
@@ -689,7 +688,7 @@ public class MainActivity extends AppCompatActivity {
                                 + Float.parseFloat(matcher.group("sec"))
                                 + Float.parseFloat(matcher.group("centisec")) * .01F
                                 + offset * .001F;
-                        lyricsLinesMap.add(new LyricsLine(time, matcher.group("lrc")));
+                        lyricsMap.add(new LyricsLine(time, matcher.group("lrc")));
                     }
                 } else if ((matcher = Pattern.compile("\\[ti:(?<ti>.*)\\]").matcher(line)).find()) {
                     tvFloatingLyrics.setText(stylizeLyrics(matcher.group("ti")).toUpperCase(Locale.ROOT));
@@ -699,10 +698,10 @@ public class MainActivity extends AppCompatActivity {
                     skippings.append(", {from: ").append(matcher.group("from")).append(", to: ").append(matcher.group("to")).append("}");
                 }
             }
-            if (!lyricsLinesMap.isEmpty()) {
-                lyricsLinesMap.sort(Comparator.comparingDouble(l -> l.time));
-                lyrics = lyricsLinesMap.toArray(lyrics);
-                nextLyricsLineLine = lyrics[0];
+            if (!lyricsMap.isEmpty()) {
+                lyricsMap.sort(Comparator.comparingDouble(l -> l.time));
+                lyrics = lyricsMap.toArray(lyrics);
+                nextLyricsLine = lyrics[0];
                 llLyricsLines = new LinearLayout[lyrics.length];
                 for (int i = 0; i < lyrics.length; ++i) {
                     LinearLayout llLyricsLine = (LinearLayout) LayoutInflater.from(this).inflate(R.layout.lyrics_line, null);
