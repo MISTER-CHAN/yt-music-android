@@ -14,27 +14,32 @@
         android:layout_weight="1"
         android:orientation="vertical">
 
-        <LinearLayout
-            android:id="@+id/ll_full_screen"
+        <FrameLayout
+            android:id="@+id/fl_full_screen"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:orientation="vertical">
+            android:layout_height="match_parent">
 
             <LinearLayout
                 android:id="@+id/ll_custom"
                 android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="2"
+                android:layout_height="match_parent"
                 android:orientation="vertical" />
 
-            <LinearLayout
-                android:id="@+id/ll_lyrics"
+            <ScrollView
+                android:id="@+id/sv_lyrics"
                 android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1"
-                android:background="@color/black"
-                android:orientation="vertical" />
-        </LinearLayout>
+                android:layout_height="match_parent"
+                android:background="#bfffffff">
+
+                <LinearLayout
+                    android:id="@+id/ll_lyrics"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingVertical="512dp" />
+            </ScrollView>
+
+        </FrameLayout>
     </LinearLayout>
 
     <View
@@ -48,6 +53,7 @@
         android:layout_height="wrap_content"
         android:background="@color/white"
         android:gravity="center"
+        android:onClick="onTitleClick"
         android:padding="8dp">
 
         <TextView
