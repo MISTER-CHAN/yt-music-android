@@ -18,6 +18,7 @@ import android.os.Bundle;
 import android.os.IBinder;
 import android.support.v4.media.MediaMetadataCompat;
 import android.support.v4.media.session.MediaSessionCompat;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
@@ -66,7 +67,7 @@ public class MainActivity extends AppCompatActivity {
             PLAYER_STATE_BUFFERING = 3,
             PLAYER_STATE_CUED = 5;
 
-    private static final Map<String, Integer> colorMap = new HashMap<String, Integer>() {{
+    private static final Map<String, Integer> colorNameMap = new HashMap<String, Integer>() {{
         put("RED", Color.RED);
         put("GREEN", Color.GREEN);
         put("BLUE", Color.BLUE);
@@ -81,6 +82,7 @@ public class MainActivity extends AppCompatActivity {
             ACTION_PAUSE = "com.mister_chan.ytmusic.action.PAUSE",
             ACTION_PLAY = "com.mister_chan.ytmusic.action.PLAY";
 
+    private static final String HOME_PAGE_URL = "https://www.youtube.com/";
     private static final String PLAYER = "document.getElementById(\"movie_player\")";
     private static final String YOUTUBE_MUSIC = "YouTube Music";
 
@@ -184,7 +186,8 @@ public class MainActivity extends AppCompatActivity {
     private boolean shouldToggleFullScreen = false;
     private boolean shouldUpdateIndexOfLyricsLineFromCurrentTime = false;
     private Button bPlayPause, bReload;
-    float lastPosition = 0F;
+    float lastPosition = 0f;
+    private int indexOfHighlightedLyricsLine = -1;
     private int indexOfNextLyricsLine = 0;
     int playerState = 0;
     private LinearLayout[] llLyricsLines;
@@ -204,7 +207,9 @@ public class MainActivity extends AppCompatActivity {
     private String jsSetSkippings = JS_SET_NO_SKIPPINGS;
     private String nowPlaying = "";
     private String lyricsLinePure = YOUTUBE_MUSIC;
-    private TextView tvFloatingLyrics, tvTitle;
+    private TextView[] tvLyricsLines;
+    private TextView tvFloatingLyrics;
+    private TextView tvTitle;
     private Timer lyricsTimer;
     private View frontView;
     private WebView webView;
@@ -257,7 +262,7 @@ public class MainActivity extends AppCompatActivity {
                                 break;
                             }
                         }
-                        indexOfNextLyricsLine = later;
+                        indexOfNextLyricsLine = Math.max(later, 0);
                         nextLyricsLine = lyrics[indexOfNextLyricsLine];
                     }
                     if (currentTime >= nextLyricsLine.time) {
@@ -267,13 +272,14 @@ public class MainActivity extends AppCompatActivity {
                         lyricsLinePure = line;
                         tvFloatingLyrics.setText(line);
                         scrollToLyricsLine(indexOfNextLyricsLine);
+                        highlightLyricsLine(indexOfNextLyricsLine);
                         if (isScreenOff) {
                             sendScreenNotification();
                         }
                         if (++indexOfNextLyricsLine < lyrics.length) {
                             nextLyricsLine = lyrics[indexOfNextLyricsLine];
                         } else {
-                            nextLyricsLine = new LyricsLine(Integer.MAX_VALUE, null);
+                            nextLyricsLine = new LyricsLine(Float.MAX_VALUE, null);
                         }
                     }
                 }
@@ -282,8 +288,7 @@ public class MainActivity extends AppCompatActivity {
                 if (shouldSeekToLastPosition) {
                     shouldSeekToLastPosition = false;
                     if (currentTime < lastPosition) {
-                        player.loadUrl("javascript:" +
-                                "player.seekTo(" + lastPosition + ")");
+                        seekTo(lastPosition);
                     }
                 } else if (shouldSetSkippings) {
                     shouldSetSkippings = false;
@@ -345,7 +350,7 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onReceivedTitle(WebView view, String title) {
             String url = view.getUrl();
-            if (url.startsWith("https://www.youtube.com")) {
+            if (url.startsWith(HOME_PAGE_URL) && !HOME_PAGE_URL.equals(url)) {
                 String v = isVideo(url);
                 if (v == null) { // Loads feed
                     view.goBack();
@@ -420,6 +425,18 @@ public class MainActivity extends AppCompatActivity {
         frontView = view;
     }
 
+    private void highlightLyricsLine(int index) {
+        if (indexOfHighlightedLyricsLine >= 0) {
+            tvLyricsLines[indexOfHighlightedLyricsLine].setTextColor(Color.LTGRAY);
+            tvLyricsLines[indexOfHighlightedLyricsLine].setTypeface(Typeface.DEFAULT);
+        }
+        indexOfHighlightedLyricsLine = index;
+        if (indexOfHighlightedLyricsLine >= 0) {
+            tvLyricsLines[indexOfHighlightedLyricsLine].setTextColor(Color.WHITE);
+            tvLyricsLines[indexOfHighlightedLyricsLine].setTypeface(Typeface.DEFAULT_BOLD);
+        }
+    }
+
     private String isVideo(String url) {
         Matcher m = videoUrlPattern.matcher(url);
         if (m.find()) {
@@ -483,8 +500,8 @@ public class MainActivity extends AppCompatActivity {
         player.setWebViewClient(playerViewClient);
         player.setWebChromeClient(playerChromeClient);
         bringToFront(webView);
-        webView.loadUrl("https://m.youtube.com");
-        player.loadUrl("https://www.youtube.com");
+        webView.loadUrl("https://m.youtube.com/");
+        player.loadUrl(HOME_PAGE_URL);
 
         // Initial lyrics window
         windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
@@ -636,8 +653,12 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void onTitleClick(View view) {
-        if (isPlaying && frontView == webView) {
-            bringToFront(llCustom.getChildCount() > 0 ? flFullScreen : player);
+        if (isPlaying) {
+            if (frontView == webView) {
+                bringToFront(llCustom.getChildCount() > 0 ? flFullScreen : player);
+            } else {
+                toggleFullScreen();
+            }
         }
     }
 
@@ -648,14 +669,14 @@ public class MainActivity extends AppCompatActivity {
         readLyrics(v);
         nowPlaying = v;
         isPlaying = true;
-        player.loadUrl("javascript:player.seekTo(0);");
+        seekTo(0f);
     }
 
     private void prepareTodoList() {
         shouldGetDuration = true;
         shouldSeekToLastPosition = false;
         shouldSetSkippings = true;
-        shouldToggleFullScreen = true;
+        shouldToggleFullScreen = llCustom.getChildCount() <= 0;
     }
 
     private String purifyLyrics(String lyrics) {
@@ -668,9 +689,12 @@ public class MainActivity extends AppCompatActivity {
         lyricsLinePure = YOUTUBE_MUSIC;
         tvFloatingLyrics.setTextColor(Color.RED);
         indexOfNextLyricsLine = 0;
-        nextLyricsLine = new LyricsLine(0, "");
+        indexOfHighlightedLyricsLine = -1;
+        nextLyricsLine = new LyricsLine(0f, "");
+        svLyrics.setVisibility(View.GONE);
         llLyrics.removeAllViews();
         llLyricsLines = new LinearLayout[0];
+        tvLyricsLines = new TextView[0];
         StringBuilder skippings = new StringBuilder();
         File file = new File("/sdcard" + "/YTMusic/lyrics/" + v + ".lrc");
         if (!file.exists()) {
@@ -679,15 +703,15 @@ public class MainActivity extends AppCompatActivity {
         }
         try (BufferedReader br = new BufferedReader(new FileReader(file))) {
             String line;
-            float offset = 0F;
+            float offset = 0f;
             while ((line = br.readLine()) != null) {
                 Matcher matcher;
                 if ((matcher = lyricsPattern.matcher(line)).find()) {
                     for (int i = 0; matcher.find(i); i += 10) {
-                        float time = Float.parseFloat(matcher.group("min")) * 60F
+                        float time = Float.parseFloat(matcher.group("min")) * 60f
                                 + Float.parseFloat(matcher.group("sec"))
-                                + Float.parseFloat(matcher.group("centisec")) * .01F
-                                + offset * .001F;
+                                + Float.parseFloat(matcher.group("centisec")) * .01f
+                                + offset * .001f;
                         lyricsMap.add(new LyricsLine(time, matcher.group("lrc")));
                     }
                 } else if ((matcher = Pattern.compile("\\[ti:(?<ti>.*)\\]").matcher(line)).find()) {
@@ -698,37 +722,47 @@ public class MainActivity extends AppCompatActivity {
                     skippings.append(", {from: ").append(matcher.group("from")).append(", to: ").append(matcher.group("to")).append("}");
                 }
             }
-            if (!lyricsMap.isEmpty()) {
-                lyricsMap.sort(Comparator.comparingDouble(l -> l.time));
-                lyrics = lyricsMap.toArray(lyrics);
-                nextLyricsLine = lyrics[0];
-                llLyricsLines = new LinearLayout[lyrics.length];
-                for (int i = 0; i < lyrics.length; ++i) {
-                    LinearLayout llLyricsLine = (LinearLayout) LayoutInflater.from(this).inflate(R.layout.lyrics_line, null);
-                    TextView tvLyricsLine = llLyricsLine.findViewById(R.id.tv_lyrics);
-                    tvLyricsLine.setTag(i);
-                    tvLyricsLine.setText(purifyLyrics(lyrics[i].lyrics));
-                    tvLyricsLine.setOnClickListener(view -> {
-                        int index = (int) view.getTag();
-                        player.loadUrl("javascript:player.seekTo(" + lyrics[index].time + ");");
-                        scrollToLyricsLine(index);
-                    });
-                    llLyrics.addView(llLyricsLine);
-                    llLyricsLines[i] = llLyricsLine;
-                }
-            }
-            svLyrics.setVisibility(lyrics.length > 0 ? View.VISIBLE : View.GONE);
-            if (!"".equals(skippings.toString())) {
-                jsSetSkippings = String.format(JS_SET_SKIPPINGS, skippings.substring(2));
-            }
         } catch (IOException e) {
             e.printStackTrace();
+        }
+        if (!lyricsMap.isEmpty()) {
+            lyricsMap.sort(Comparator.comparingDouble(l -> l.time));
+            lyrics = lyricsMap.toArray(lyrics);
+            nextLyricsLine = lyrics[0];
+            llLyricsLines = new LinearLayout[lyrics.length];
+            tvLyricsLines = new TextView[lyrics.length];
+            for (int i = 0; i < lyrics.length; ++i) {
+                LinearLayout llLyricsLine = (LinearLayout) LayoutInflater.from(this).inflate(R.layout.lyrics_line, null);
+                llLyricsLines[i] = llLyricsLine;
+                TextView tvLyricsLine = llLyricsLine.findViewById(R.id.tv_lyrics);
+                tvLyricsLines[i] = tvLyricsLine;
+                tvLyricsLine.setTag(i);
+                tvLyricsLine.setText(purifyLyrics(lyrics[i].lyrics));
+                tvLyricsLine.setOnClickListener(view -> {
+                    int index = (int) view.getTag();
+                    seekTo(lyrics[index].time);
+                    scrollToLyricsLine(index);
+                    highlightLyricsLine(index);
+                    tvFloatingLyrics.setText(stylizeLyrics(lyrics[index].lyrics));
+                });
+                llLyrics.addView(llLyricsLine);
+            }
+        }
+        if (lyrics.length > 0) {
+            svLyrics.setVisibility(View.VISIBLE);
+        }
+        if (!"".equals(skippings.toString())) {
+            jsSetSkippings = String.format(JS_SET_SKIPPINGS, skippings.substring(2));
         }
     }
 
     private void scrollToLyricsLine(int index) {
         svLyrics.smoothScrollTo(0,
                 llLyricsLines[index].getTop() + (llLyricsLines[index].getHeight() >> 1) - (svLyrics.getHeight() >> 1));
+    }
+
+    private void seekTo(float seconds) {
+        player.loadUrl("javascript:player.seekTo(" + seconds + ")");
     }
 
     private void sendNotification() {
@@ -751,8 +785,9 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setLyricsStyle(String style) {
-        if (colorMap.containsKey(style)) {
-            tvFloatingLyrics.setTextColor(colorMap.get(style));
+        Integer color = colorNameMap.get(style);
+        if (color != null) {
+            tvFloatingLyrics.setTextColor(color);
         }
     }
 

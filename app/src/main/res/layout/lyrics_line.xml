@@ -11,6 +11,6 @@
         android:background="@drawable/btn_bg_selector"
         android:gravity="center"
         android:padding="16dp"
-        android:textColor="@color/black"
+        android:textColor="#FFCCCCCC"
         android:textSize="24sp" />
 </LinearLayout>
