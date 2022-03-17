@@ -36,6 +36,7 @@ import android.webkit.WebViewClient;
 import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
@@ -95,10 +96,15 @@ public class MainActivity extends AppCompatActivity {
             "}, 100);";
 
     private static final String JS_GET_CURRENT_TIME = "" +
-            "if (typeof player != \"undefined\" && player != null) {" +
-            "    var currentTime = player.getCurrentTime();" +
-            "    currentTime" +
-            "}";
+            "(() => {" +
+            "    if (typeof player != \"undefined\" && player != null) {" +
+            "        var currentTime = 0;" +
+            "        try {" +
+            "            currentTime = player.getCurrentTime();" +
+            "        } catch (e) {}" +
+            "        return currentTime;" +
+            "    }" +
+            "})()";
 
     private static final String JS_NEXT_VIDEO = "javascript:" + PLAYER + ".seekTo(" + PLAYER + ".getDuration())";
     private static final String JS_PAUSE_VIDEO = "javascript:" + PLAYER + ".pauseVideo()";
@@ -135,13 +141,16 @@ public class MainActivity extends AppCompatActivity {
     private static final String JS_SKIP_AD = "javascript:" +
             "setInterval(() => {" +
             "    if (typeof player != \"undefined\" && player != null) {" +
-            "        let $cross = document.getElementsByClassName(\"ytp-ad-overlay-close-container\")[0];" +
-            "        let $skip = document.getElementsByClassName(\"ytp-ad-skip-button\")[0];" +
-            "        if ($cross != null) {" +
-            "            $cross.click();" +
-            "        }" +
-            "        if ($skip != null) {" +
-            "             $skip.click();" +
+            "        let skip = document.getElementsByClassName(\"ytp-ad-skip-button\")[0];" +
+            "        if (skip != null) {" +
+            "            skip.click();" +
+            "        } else {" +
+            "            let isMuted = player.isMuted(), ad = document.getElementsByClassName(\"ytp-ad-player-overlay\").length > 0;" +
+            "            if (!isMuted && ad) {" +
+            "                player.mute();" +
+            "            } else if (!ad && isMuted) {" +
+            "                player.unMute();" +
+            "            }" +
             "        }" +
             "    }" +
             "}, 100);";
@@ -178,6 +187,7 @@ public class MainActivity extends AppCompatActivity {
             "    }" +
             "}, 100);";
 
+    private boolean isCustomViewShowed = false;
     private boolean isPlaying = false;
     private boolean isScreenOff = false;
     private boolean shouldSetSkippings = false;
@@ -185,7 +195,7 @@ public class MainActivity extends AppCompatActivity {
     private boolean shouldSeekToLastPosition = false;
     private boolean shouldToggleFullScreen = false;
     private boolean shouldUpdateIndexOfLyricsLineFromCurrentTime = false;
-    private Button bPlayPause, bReload;
+    private Button bNextVideo, bPlayPause;
     float lastPosition = 0f;
     private int indexOfHighlightedLyricsLine = -1;
     private int indexOfNextLyricsLine = 0;
@@ -202,6 +212,7 @@ public class MainActivity extends AppCompatActivity {
     private MediaWebView player;
     NotificationCompat.Action lyricsAction, nextAction;
     private NotificationService notificationService;
+    private ProgressBar pbProgress;
     private ScrollView svLyrics;
     String title = YOUTUBE_MUSIC;
     private String jsSetSkippings = JS_SET_NO_SKIPPINGS;
@@ -240,6 +251,7 @@ public class MainActivity extends AppCompatActivity {
                     return;
                 }
                 float currentTime = Float.parseFloat(value);
+                pbProgress.setProgress((int) currentTime);
                 if (currentTime <= 0) {
                     return;
                 }
@@ -304,6 +316,7 @@ public class MainActivity extends AppCompatActivity {
                             }
                             shouldGetDuration = false;
                             duration = (long) Float.parseFloat(value);
+                            pbProgress.setMax((int) duration);
                             if (!isScreenOff) {
                                 sendNotification();
                             }
@@ -377,6 +390,7 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onHideCustomView() {
             super.onHideCustomView();
+            isCustomViewShowed = false;
             llCustom.removeAllViews();
             bringToFront(player);
         }
@@ -384,6 +398,7 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onShowCustomView(View view, CustomViewCallback callback) {
             super.onShowCustomView(view, callback);
+            isCustomViewShowed = true;
             llCustom.addView(view);
             bringToFront(flFullScreen);
         }
@@ -418,10 +433,9 @@ public class MainActivity extends AppCompatActivity {
     };
 
     private synchronized void bringToFront(View view) {
-        webView.setVisibility(View.GONE);
-        player.setVisibility(View.GONE);
-        flFullScreen.setVisibility(View.GONE);
-        view.setVisibility(View.VISIBLE);
+        webView.setVisibility(view == webView ? View.VISIBLE : View.GONE);
+        player.setVisibility(view == player ? View.VISIBLE : View.GONE);
+        flFullScreen.setVisibility(view == flFullScreen ? View.VISIBLE : View.GONE);
         frontView = view;
     }
 
@@ -470,22 +484,20 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        bNextVideo = findViewById(R.id.b_next_video);
         bPlayPause = findViewById(R.id.b_play_pause);
-        bReload = findViewById(R.id.b_reload);
         llWebView = findViewById(R.id.ll_webview);
         llCustom = findViewById(R.id.ll_custom);
         flFullScreen = findViewById(R.id.fl_full_screen);
         llLyrics = findViewById(R.id.ll_lyrics);
+        pbProgress = findViewById(R.id.pb_progress);
         svLyrics = findViewById(R.id.sv_lyrics);
         tvTitle = findViewById(R.id.tv_title);
 
         // Initial views
+        bNextVideo.setTypeface(Typeface.createFromAsset(getAssets(), "Player.ttf"));
         bPlayPause.setTypeface(Typeface.createFromAsset(getAssets(), "Player.ttf"));
         bPlayPause.setOnClickListener(v -> toggleState());
-        bReload.setOnClickListener(v -> {
-            bReload.setVisibility(View.GONE);
-            player.reload();
-        });
 
         // Initial WebViews
         webView = new WebView(this);
@@ -622,20 +634,24 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
-    public boolean onKeyDown(int keyCode, KeyEvent event) {
-        if (keyCode == KeyEvent.KEYCODE_BACK) {
-            if (frontView == webView) {
-                if (webView.canGoBack()) {
-                    webView.goBack();
-                } else {
-                    moveTaskToBack(false);
-                }
-            } else if (frontView == player || frontView == flFullScreen) {
-                bringToFront(webView);
+    public void onBackPressed() {
+        if (frontView == webView) {
+            if (webView.canGoBack()) {
+                webView.goBack();
+            } else {
+                moveTaskToBack(false);
             }
-            return true;
+        } else if (frontView == player || frontView == flFullScreen) {
+            bringToFront(webView);
         }
-        return super.onKeyDown(keyCode, event);
+    }
+
+    @Override
+    protected void onPause() {
+        if (isCustomViewShowed) {
+            toggleFullScreen();
+        }
+        super.onPause();
     }
 
     @JavascriptInterface
@@ -655,7 +671,7 @@ public class MainActivity extends AppCompatActivity {
     public void onTitleClick(View view) {
         if (isPlaying) {
             if (frontView == webView) {
-                bringToFront(llCustom.getChildCount() > 0 ? flFullScreen : player);
+                bringToFront(isCustomViewShowed ? flFullScreen : player);
             } else {
                 toggleFullScreen();
             }
@@ -676,7 +692,7 @@ public class MainActivity extends AppCompatActivity {
         shouldGetDuration = true;
         shouldSeekToLastPosition = false;
         shouldSetSkippings = true;
-        shouldToggleFullScreen = llCustom.getChildCount() <= 0;
+        shouldToggleFullScreen = !isCustomViewShowed;
     }
 
     private String purifyLyrics(String lyrics) {
@@ -749,6 +765,7 @@ public class MainActivity extends AppCompatActivity {
             }
         }
         if (lyrics.length > 0) {
+            svLyrics.scrollTo(0, 0);
             svLyrics.setVisibility(View.VISIBLE);
         }
         if (!"".equals(skippings.toString())) {

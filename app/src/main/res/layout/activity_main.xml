@@ -10,7 +10,7 @@
     <LinearLayout
         android:id="@+id/ll_webview"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_height="0dp"
         android:layout_weight="1"
         android:orientation="vertical">
 
@@ -42,10 +42,11 @@
         </FrameLayout>
     </LinearLayout>
 
-    <View
+    <ProgressBar
+        android:id="@+id/pb_progress"
+        style="@style/Widget.AppCompat.ProgressBar.Horizontal"
         android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:background="@color/light_gray" />
+        android:layout_height="1dp" />
 
     <LinearLayout
         android:id="@+id/ll_title"
@@ -58,7 +59,7 @@
 
         <TextView
             android:id="@+id/tv_title"
-            android:layout_width="match_parent"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:maxLines="1"
@@ -67,21 +68,20 @@
             android:textSize="16sp" />
 
         <Button
-            android:id="@+id/b_reload"
-            style="?android:attr/buttonBarButtonStyle"
-            android:layout_width="32dp"
-            android:layout_height="wrap_content"
-            android:text="↻"
-            android:textColor="@color/black"
-            android:textSize="24sp"
-            android:visibility="gone" />
-
-        <Button
             android:id="@+id/b_play_pause"
             style="?android:attr/buttonBarButtonStyle"
-            android:layout_width="32dp"
+            android:layout_width="48dp"
             android:layout_height="wrap_content"
             android:text="⏵"
+            android:textColor="@color/black"
+            android:textSize="24sp" />
+
+        <Button
+            android:id="@+id/b_next_video"
+            style="?android:attr/buttonBarButtonStyle"
+            android:layout_width="48dp"
+            android:layout_height="wrap_content"
+            android:text="⏭"
             android:textColor="@color/black"
             android:textSize="24sp" />
     </LinearLayout>

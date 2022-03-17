@@ -3,10 +3,14 @@
   <component name="DesignSurface">
     <option name="filePathToZoomLevelMap">
       <map>
+        <entry key="..\:/AndroidApps/YTMusic/app/src/main/res/drawable/btn_bg_selector.xml" value="0.228" />
         <entry key="..\:/AndroidApps/YTMusic/app/src/main/res/drawable/btn_bg_seletor.xml" value="0.228" />
         <entry key="..\:/AndroidApps/YTMusic/app/src/main/res/layout/activity_main.xml" value="0.1296875" />
         <entry key="..\:/AndroidApps/YTMusic/app/src/main/res/layout/lyrics_line.xml" value="0.23143115942028986" />
         <entry key="..\:/AndroidApps/YTMusic/app/src/main/res/layout/notification.xml" value="0.1296875" />
+        <entry key="..\:/AndroidApps/YTMusic/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml" value="0.228" />
+        <entry key="..\:/AndroidApps/YTMusic/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml" value="0.228" />
+        <entry key="..\:/AndroidApps/YTMusic/app/src/main/res/mipmap-anydpi-v26/ic_ytmusic.xml" value="0.228" />
       </map>
     </option>
   </component>
