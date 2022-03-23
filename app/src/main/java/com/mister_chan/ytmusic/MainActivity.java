@@ -187,6 +187,9 @@ public class MainActivity extends AppCompatActivity {
             "    }" +
             "}, 100);";
 
+    private static final Typeface TYPEFACE_DEFAULT_ITALIC = Typeface.defaultFromStyle(Typeface.ITALIC);
+    private static final Typeface TYPEFACE_DEFAULT_BOLD_ITALIC = Typeface.defaultFromStyle(Typeface.BOLD_ITALIC);
+
     private boolean floatingLyrics = true;
     private boolean isCustomViewShowed = false;
     private boolean isPlaying = false;
@@ -456,13 +459,13 @@ public class MainActivity extends AppCompatActivity {
         if (0 < indexOfHighlightedLyricsLine && indexOfHighlightedLyricsLine < lyrics.length - 1) {
             tvLyricsLines[indexOfHighlightedLyricsLine].setTextSize(20.0f);
             tvLyricsLines[indexOfHighlightedLyricsLine].setTextColor(Color.LTGRAY);
-            tvLyricsLines[indexOfHighlightedLyricsLine].setTypeface(Typeface.defaultFromStyle(Typeface.ITALIC));
+            tvLyricsLines[indexOfHighlightedLyricsLine].setTypeface(TYPEFACE_DEFAULT_ITALIC);
         }
         indexOfHighlightedLyricsLine = index;
         if (0 < indexOfHighlightedLyricsLine && indexOfHighlightedLyricsLine < lyrics.length - 1) {
             tvLyricsLines[indexOfHighlightedLyricsLine].setTextSize(24.0f);
             tvLyricsLines[indexOfHighlightedLyricsLine].setTextColor(Color.WHITE);
-            tvLyricsLines[indexOfHighlightedLyricsLine].setTypeface(Typeface.defaultFromStyle(Typeface.BOLD_ITALIC));
+            tvLyricsLines[indexOfHighlightedLyricsLine].setTypeface(TYPEFACE_DEFAULT_BOLD_ITALIC);
         }
     }
 
@@ -542,7 +545,7 @@ public class MainActivity extends AppCompatActivity {
         tvFloatingLyrics.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
         tvFloatingLyrics.setTextColor(Color.RED);
         tvFloatingLyrics.setTextSize(24);
-        tvFloatingLyrics.setTypeface(Typeface.defaultFromStyle(Typeface.BOLD_ITALIC));
+        tvFloatingLyrics.setTypeface(TYPEFACE_DEFAULT_BOLD_ITALIC);
         windowManager.addView(tvFloatingLyrics, wmlp);
 
         // Initial notification
