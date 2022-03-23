@@ -25,19 +25,13 @@
                 android:layout_height="match_parent"
                 android:orientation="vertical" />
 
-            <ScrollView
-                android:id="@+id/sv_lyrics"
+            <ListView
+                android:id="@+id/lv_lyrics"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:background="#88000000">
-
-                <LinearLayout
-                    android:id="@+id/ll_lyrics"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:paddingVertical="512dp" />
-            </ScrollView>
+                android:background="#88000000"
+                android:divider="#00000000"
+                android:dividerHeight="0dp" />
 
         </FrameLayout>
     </LinearLayout>

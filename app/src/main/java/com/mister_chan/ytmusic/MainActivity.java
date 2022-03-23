@@ -18,10 +18,8 @@ import android.os.Bundle;
 import android.os.IBinder;
 import android.support.v4.media.MediaMetadataCompat;
 import android.support.v4.media.session.MediaSessionCompat;
-import android.util.Log;
+import android.util.TypedValue;
 import android.view.Gravity;
-import android.view.KeyEvent;
-import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
@@ -33,11 +31,12 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.AdapterView;
 import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.ListView;
 import android.widget.ProgressBar;
-import android.widget.ScrollView;
 import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
@@ -57,6 +56,7 @@ import java.util.Timer;
 import java.util.TimerTask;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -187,6 +187,7 @@ public class MainActivity extends AppCompatActivity {
             "    }" +
             "}, 100);";
 
+    private boolean floatingLyrics = true;
     private boolean isCustomViewShowed = false;
     private boolean isPlaying = false;
     private boolean isScreenOff = false;
@@ -197,14 +198,13 @@ public class MainActivity extends AppCompatActivity {
     private boolean shouldUpdateIndexOfLyricsLineFromCurrentTime = false;
     private Button bNextVideo, bPlayPause;
     float lastPosition = 0f;
-    private int indexOfHighlightedLyricsLine = -1;
-    private int indexOfNextLyricsLine = 0;
-    int playerState = 0;
-    private LinearLayout[] llLyricsLines;
-    private LinearLayout llCustom;
     private FrameLayout flFullScreen;
-    private LinearLayout llLyrics;
+    private int indexOfHighlightedLyricsLine = -1;
+    private int indexOfNextLyricsLine = 1;
+    int playerState = 0;
+    private LinearLayout llCustom;
     private LinearLayout llWebView;
+    private ListView lvLyrics;
     long duration = 0L;
     private LyricsLine[] lyrics;
     private LyricsLine nextLyricsLine;
@@ -213,18 +213,29 @@ public class MainActivity extends AppCompatActivity {
     NotificationCompat.Action lyricsAction, nextAction;
     private NotificationService notificationService;
     private ProgressBar pbProgress;
-    private ScrollView svLyrics;
     String title = YOUTUBE_MUSIC;
     private String jsSetSkippings = JS_SET_NO_SKIPPINGS;
     private String nowPlaying = "";
     private String lyricsLinePure = YOUTUBE_MUSIC;
-    private TextView[] tvLyricsLines;
+    TextView[] tvLyricsLines;
     private TextView tvFloatingLyrics;
     private TextView tvTitle;
     private Timer lyricsTimer;
     private View frontView;
     private WebView webView;
     private WindowManager windowManager;
+
+    private final AdapterView.OnItemClickListener onLyricsLineClickListener = new AdapterView.OnItemClickListener() {
+        @Override
+        public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+            if (0 < position && position < lyrics.length - 1) {
+                seekTo(lyrics[position].time);
+                scrollToLyricsLine(position);
+                highlightLyricsLine(position);
+                tvFloatingLyrics.setText(stylizeLyrics(lyrics[position].lyrics));
+            }
+        }
+    };
 
     private final ServiceConnection connection = new ServiceConnection() {
         @Override
@@ -280,7 +291,6 @@ public class MainActivity extends AppCompatActivity {
                     if (currentTime >= nextLyricsLine.time) {
                         String line = nextLyricsLine.lyrics;
                         line = stylizeLyrics(line);
-                        line = line.toUpperCase(Locale.ROOT);
                         lyricsLinePure = line;
                         tvFloatingLyrics.setText(line);
                         scrollToLyricsLine(indexOfNextLyricsLine);
@@ -437,21 +447,26 @@ public class MainActivity extends AppCompatActivity {
         player.setVisibility(view == player ? View.VISIBLE : View.GONE);
         flFullScreen.setVisibility(view == flFullScreen ? View.VISIBLE : View.GONE);
         frontView = view;
+        if (floatingLyrics && tvFloatingLyrics != null) {
+            tvFloatingLyrics.setVisibility(view == flFullScreen ? View.GONE : View.VISIBLE);
+        }
     }
 
     private void highlightLyricsLine(int index) {
-        if (indexOfHighlightedLyricsLine >= 0) {
+        if (0 < indexOfHighlightedLyricsLine && indexOfHighlightedLyricsLine < lyrics.length - 1) {
+            tvLyricsLines[indexOfHighlightedLyricsLine].setTextSize(20.0f);
             tvLyricsLines[indexOfHighlightedLyricsLine].setTextColor(Color.LTGRAY);
-            tvLyricsLines[indexOfHighlightedLyricsLine].setTypeface(Typeface.DEFAULT);
+            tvLyricsLines[indexOfHighlightedLyricsLine].setTypeface(Typeface.defaultFromStyle(Typeface.ITALIC));
         }
         indexOfHighlightedLyricsLine = index;
-        if (indexOfHighlightedLyricsLine >= 0) {
+        if (0 < indexOfHighlightedLyricsLine && indexOfHighlightedLyricsLine < lyrics.length - 1) {
+            tvLyricsLines[indexOfHighlightedLyricsLine].setTextSize(24.0f);
             tvLyricsLines[indexOfHighlightedLyricsLine].setTextColor(Color.WHITE);
-            tvLyricsLines[indexOfHighlightedLyricsLine].setTypeface(Typeface.DEFAULT_BOLD);
+            tvLyricsLines[indexOfHighlightedLyricsLine].setTypeface(Typeface.defaultFromStyle(Typeface.BOLD_ITALIC));
         }
     }
 
-    private String isVideo(String url) {
+    private static String isVideo(String url) {
         Matcher m = videoUrlPattern.matcher(url);
         if (m.find()) {
             return m.group("v");
@@ -486,12 +501,11 @@ public class MainActivity extends AppCompatActivity {
 
         bNextVideo = findViewById(R.id.b_next_video);
         bPlayPause = findViewById(R.id.b_play_pause);
+        flFullScreen = findViewById(R.id.fl_full_screen);
         llWebView = findViewById(R.id.ll_webview);
         llCustom = findViewById(R.id.ll_custom);
-        flFullScreen = findViewById(R.id.fl_full_screen);
-        llLyrics = findViewById(R.id.ll_lyrics);
+        lvLyrics = findViewById(R.id.lv_lyrics);
         pbProgress = findViewById(R.id.pb_progress);
-        svLyrics = findViewById(R.id.sv_lyrics);
         tvTitle = findViewById(R.id.tv_title);
 
         // Initial views
@@ -513,9 +527,8 @@ public class MainActivity extends AppCompatActivity {
         player.setWebChromeClient(playerChromeClient);
         bringToFront(webView);
         webView.loadUrl("https://m.youtube.com/");
-        player.loadUrl(HOME_PAGE_URL);
 
-        // Initial lyrics window
+        // Initial floating lyrics window
         windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
         WindowManager.LayoutParams wmlp = new WindowManager.LayoutParams();
         wmlp.width = WindowManager.LayoutParams.MATCH_PARENT;
@@ -526,7 +539,6 @@ public class MainActivity extends AppCompatActivity {
         wmlp.type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
         tvFloatingLyrics = new TextView(this);
         tvFloatingLyrics.setPadding(0, 0x100, 0, 0);
-        tvFloatingLyrics.setText(YOUTUBE_MUSIC);
         tvFloatingLyrics.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
         tvFloatingLyrics.setTextColor(Color.RED);
         tvFloatingLyrics.setTextSize(24);
@@ -575,16 +587,8 @@ public class MainActivity extends AppCompatActivity {
                         player.loadUrl(JS_NEXT_VIDEO);
                         break;
                     case ACTION_LYRICS:
-                        int visibility = tvFloatingLyrics.getVisibility();
-                        switch (visibility) {
-                            case View.VISIBLE:
-                                tvFloatingLyrics.setVisibility(View.GONE);
-                                break;
-                            case View.INVISIBLE:
-                            case View.GONE:
-                                tvFloatingLyrics.setVisibility(View.VISIBLE);
-                                break;
-                        }
+                        floatingLyrics = !floatingLyrics;
+                        tvFloatingLyrics.setVisibility(floatingLyrics ? View.VISIBLE : View.GONE);
                         break;
                 }
                 abortBroadcast();
@@ -685,7 +689,7 @@ public class MainActivity extends AppCompatActivity {
         readLyrics(v);
         nowPlaying = v;
         isPlaying = true;
-        seekTo(0f);
+        seekTo(0.0f);
     }
 
     private void prepareTodoList() {
@@ -702,14 +706,14 @@ public class MainActivity extends AppCompatActivity {
     private void readLyrics(String v) {
         lyrics = new LyricsLine[0];
         List<LyricsLine> lyricsMap = new ArrayList<>();
+        lyricsMap.add(new LyricsLine(0.0f, ""));
         lyricsLinePure = YOUTUBE_MUSIC;
         tvFloatingLyrics.setTextColor(Color.RED);
         indexOfNextLyricsLine = 0;
         indexOfHighlightedLyricsLine = -1;
-        nextLyricsLine = new LyricsLine(0f, "");
-        svLyrics.setVisibility(View.GONE);
-        llLyrics.removeAllViews();
-        llLyricsLines = new LinearLayout[0];
+        nextLyricsLine = new LyricsLine(0.0f, "");
+        lvLyrics.setVisibility(View.GONE);
+        lvLyrics.setAdapter(null);
         tvLyricsLines = new TextView[0];
         StringBuilder skippings = new StringBuilder();
         File file = new File("/sdcard" + "/YTMusic/lyrics/" + v + ".lrc");
@@ -719,16 +723,16 @@ public class MainActivity extends AppCompatActivity {
         }
         try (BufferedReader br = new BufferedReader(new FileReader(file))) {
             String line;
-            float offset = 0f;
+            float offset = 0.0f;
             while ((line = br.readLine()) != null) {
                 Matcher matcher;
                 if ((matcher = lyricsPattern.matcher(line)).find()) {
                     for (int i = 0; matcher.find(i); i += 10) {
                         float time = Float.parseFloat(matcher.group("min")) * 60f
                                 + Float.parseFloat(matcher.group("sec"))
-                                + Float.parseFloat(matcher.group("centisec")) * .01f
-                                + offset * .001f;
-                        lyricsMap.add(new LyricsLine(time, matcher.group("lrc")));
+                                + Float.parseFloat(matcher.group("centisec")) * 0.01f
+                                + offset * 0.001f;
+                        lyricsMap.add(new LyricsLine(time, matcher.group("lrc").toUpperCase(Locale.ROOT)));
                     }
                 } else if ((matcher = Pattern.compile("\\[ti:(?<ti>.*)\\]").matcher(line)).find()) {
                     tvFloatingLyrics.setText(stylizeLyrics(matcher.group("ti")).toUpperCase(Locale.ROOT));
@@ -741,32 +745,18 @@ public class MainActivity extends AppCompatActivity {
         } catch (IOException e) {
             e.printStackTrace();
         }
-        if (!lyricsMap.isEmpty()) {
+        if (lyricsMap.size() > 1) {
             lyricsMap.sort(Comparator.comparingDouble(l -> l.time));
+            lyricsMap.add(new LyricsLine(Float.MAX_VALUE, ""));
             lyrics = lyricsMap.toArray(lyrics);
             nextLyricsLine = lyrics[0];
-            llLyricsLines = new LinearLayout[lyrics.length];
+
             tvLyricsLines = new TextView[lyrics.length];
-            for (int i = 0; i < lyrics.length; ++i) {
-                LinearLayout llLyricsLine = (LinearLayout) LayoutInflater.from(this).inflate(R.layout.lyrics_line, null);
-                llLyricsLines[i] = llLyricsLine;
-                TextView tvLyricsLine = llLyricsLine.findViewById(R.id.tv_lyrics);
-                tvLyricsLines[i] = tvLyricsLine;
-                tvLyricsLine.setTag(i);
-                tvLyricsLine.setText(purifyLyrics(lyrics[i].lyrics));
-                tvLyricsLine.setOnClickListener(view -> {
-                    int index = (int) view.getTag();
-                    seekTo(lyrics[index].time);
-                    scrollToLyricsLine(index);
-                    highlightLyricsLine(index);
-                    tvFloatingLyrics.setText(stylizeLyrics(lyrics[index].lyrics));
-                });
-                llLyrics.addView(llLyricsLine);
-            }
-        }
-        if (lyrics.length > 0) {
-            svLyrics.scrollTo(0, 0);
-            svLyrics.setVisibility(View.VISIBLE);
+            lvLyrics.setAdapter(new LyricsAdapter(this, lyricsMap.stream().map(ll -> purifyLyrics(ll.lyrics)).collect(Collectors.toList())));
+            lvLyrics.setOnItemClickListener(onLyricsLineClickListener);
+
+            lvLyrics.scrollTo(0, 0);
+            lvLyrics.setVisibility(View.VISIBLE);
         }
         if (!"".equals(skippings.toString())) {
             jsSetSkippings = String.format(JS_SET_SKIPPINGS, skippings.substring(2));
@@ -774,8 +764,9 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void scrollToLyricsLine(int index) {
-        svLyrics.smoothScrollTo(0,
-                llLyricsLines[index].getTop() + (llLyricsLines[index].getHeight() >> 1) - (svLyrics.getHeight() >> 1));
+        if (0 < index && index < lyrics.length - 1) {
+            lvLyrics.smoothScrollToPositionFromTop(index, (lvLyrics.getHeight() >> 1) - (tvLyricsLines[index].getHeight() >> 1));
+        }
     }
 
     private void seekTo(float seconds) {
