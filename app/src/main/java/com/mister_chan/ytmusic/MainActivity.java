@@ -228,18 +228,6 @@ public class MainActivity extends AppCompatActivity {
     private WebView webView;
     private WindowManager windowManager;
 
-    private final AdapterView.OnItemClickListener onLyricsLineClickListener = new AdapterView.OnItemClickListener() {
-        @Override
-        public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-            if (0 < position && position < lyrics.length - 1) {
-                seekTo(lyrics[position].time);
-                scrollToLyricsLine(position);
-                highlightLyricsLine(position);
-                tvFloatingLyrics.setText(stylizeLyrics(lyrics[position].lyrics));
-            }
-        }
-    };
-
     private final ServiceConnection connection = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
@@ -515,6 +503,14 @@ public class MainActivity extends AppCompatActivity {
         bNextVideo.setTypeface(Typeface.createFromAsset(getAssets(), "Player.ttf"));
         bPlayPause.setTypeface(Typeface.createFromAsset(getAssets(), "Player.ttf"));
         bPlayPause.setOnClickListener(v -> toggleState());
+        lvLyrics.setOnItemClickListener((parent, view, position, id) -> {
+            if (0 < position && position < lyrics.length - 1) {
+                seekTo(lyrics[position].time);
+                scrollToLyricsLine(position);
+                highlightLyricsLine(position);
+                tvFloatingLyrics.setText(stylizeLyrics(lyrics[position].lyrics));
+            }
+        });
 
         // Initial WebViews
         webView = new WebView(this);
@@ -756,7 +752,6 @@ public class MainActivity extends AppCompatActivity {
 
             tvLyricsLines = new TextView[lyrics.length];
             lvLyrics.setAdapter(new LyricsAdapter(this, lyricsMap.stream().map(ll -> purifyLyrics(ll.lyrics)).collect(Collectors.toList())));
-            lvLyrics.setOnItemClickListener(onLyricsLineClickListener);
 
             lvLyrics.scrollTo(0, 0);
             lvLyrics.setVisibility(View.VISIBLE);
