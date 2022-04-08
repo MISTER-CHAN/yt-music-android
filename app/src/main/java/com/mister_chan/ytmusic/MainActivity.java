@@ -1,6 +1,7 @@
 package com.mister_chan.ytmusic;
 
 import android.annotation.SuppressLint;
+import android.app.AlertDialog;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
@@ -18,7 +19,6 @@ import android.os.Bundle;
 import android.os.IBinder;
 import android.support.v4.media.MediaMetadataCompat;
 import android.support.v4.media.session.MediaSessionCompat;
-import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -31,13 +31,13 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
-import android.widget.AdapterView;
 import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.NotificationCompat;
@@ -74,8 +74,8 @@ public class MainActivity extends AppCompatActivity {
         put("BLUE", Color.BLUE);
     }};
 
-    private static final Pattern lyricsPattern = Pattern.compile("\\[(?<min>\\d{2}):(?<sec>\\d{2})\\.(?<centisec>\\d{2})\\](?:\\[\\d{2}:\\d{2}\\.\\d{2}\\])*(?<lrc>[^\\[\\]]+)$");
-    private static final Pattern videoUrlPattern = Pattern.compile("^https?://(?:www|m)\\.youtube\\.com/.*[?&]v=(?<v>[-0-9A-Z_a-z]+)");
+    private static final Pattern PATTERN_LYRICS = Pattern.compile("\\[(?<min>\\d{2}):(?<sec>\\d{2})\\.(?<centisec>\\d{2})\\](?:\\[\\d{2}:\\d{2}\\.\\d{2}\\])*(?<lrc>[^\\[\\]]+)$");
+    private static final Pattern PATTERN_VIDEO_URL = Pattern.compile("^https?://(?:www|m)\\.youtube\\.com/.*[?&]v=(?<v>[-0-9A-Z_a-z]+)");
 
     static final String
             ACTION_LYRICS = "com.mister_chan.ytmusic.action.LYRICS",
@@ -247,6 +247,7 @@ public class MainActivity extends AppCompatActivity {
     private final TimerTask lyricsTimerTask = new TimerTask() {
         @Override
         public void run() {
+
             runOnUiThread(() -> player.evaluateJavascript(JS_GET_CURRENT_TIME, value -> {
                 // value - current time in seconds
                 if ("null".equals(value)) {
@@ -407,7 +408,7 @@ public class MainActivity extends AppCompatActivity {
 
     private final WebViewClient viewClient = new WebViewClient() {
         @Override
-        public void onLoadResource(WebView view, String url) {
+        public void doUpdateVisitedHistory(WebView view, String url, boolean isReload) {
             String v = isVideo(url);
             if (v != null) {
                 view.goBack();
@@ -417,7 +418,7 @@ public class MainActivity extends AppCompatActivity {
                 prepareTodoList();
                 bringToFront(player);
             }
-            super.onLoadResource(view, url);
+            super.doUpdateVisitedHistory(view, url, isReload);
         }
 
         @Override
@@ -458,7 +459,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private static String isVideo(String url) {
-        Matcher m = videoUrlPattern.matcher(url);
+        Matcher m = PATTERN_VIDEO_URL.matcher(url);
         if (m.find()) {
             return m.group("v");
         }
@@ -725,7 +726,7 @@ public class MainActivity extends AppCompatActivity {
             float offset = 0.0f;
             while ((line = br.readLine()) != null) {
                 Matcher matcher;
-                if ((matcher = lyricsPattern.matcher(line)).find()) {
+                if ((matcher = PATTERN_LYRICS.matcher(line)).find()) {
                     for (int i = 0; matcher.find(i); i += 10) {
                         float time = Float.parseFloat(matcher.group("min")) * 60f
                                 + Float.parseFloat(matcher.group("sec"))
