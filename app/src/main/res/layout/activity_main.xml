@@ -33,6 +33,33 @@
                 android:divider="#00000000"
                 android:dividerHeight="0dp" />
 
+            <LinearLayout
+                android:id="@+id/ll_no_lyrics_warning"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom|end"
+                android:layout_marginBottom="64dp"
+                android:background="#FF000000"
+                android:gravity="center"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:padding="8dp"
+                    android:text="搜尋歌詞"
+                    android:textColor="#FF7F7FFF" />
+
+                <TextView
+                    android:id="@+id/tv_ignore_lyrics"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:padding="8dp"
+                    android:text="忽略"
+                    android:textColor="#FF7F7FFF" />
+            </LinearLayout>
+
         </FrameLayout>
     </LinearLayout>
 

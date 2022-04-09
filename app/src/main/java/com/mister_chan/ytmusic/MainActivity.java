@@ -1,7 +1,6 @@
 package com.mister_chan.ytmusic;
 
 import android.annotation.SuppressLint;
-import android.app.AlertDialog;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
@@ -19,6 +18,7 @@ import android.os.Bundle;
 import android.os.IBinder;
 import android.support.v4.media.MediaMetadataCompat;
 import android.support.v4.media.session.MediaSessionCompat;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -31,13 +31,13 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.AdapterView;
 import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.NotificationCompat;
@@ -68,11 +68,13 @@ public class MainActivity extends AppCompatActivity {
             PLAYER_STATE_BUFFERING = 3,
             PLAYER_STATE_CUED = 5;
 
-    private static final Map<String, Integer> colorNameMap = new HashMap<String, Integer>() {{
-        put("RED", Color.RED);
-        put("GREEN", Color.GREEN);
-        put("BLUE", Color.BLUE);
-    }};
+    private static final Map<String, Integer> colorNameMap = new HashMap<String, Integer>() {
+        {
+            put("RED", Color.RED);
+            put("GREEN", Color.GREEN);
+            put("BLUE", Color.BLUE);
+        }
+    };
 
     private static final Pattern PATTERN_LYRICS = Pattern.compile("\\[(?<min>\\d{2}):(?<sec>\\d{2})\\.(?<centisec>\\d{2})\\](?:\\[\\d{2}:\\d{2}\\.\\d{2}\\])*(?<lrc>[^\\[\\]]+)$");
     private static final Pattern PATTERN_VIDEO_URL = Pattern.compile("^https?://(?:www|m)\\.youtube\\.com/.*[?&]v=(?<v>[-0-9A-Z_a-z]+)");
@@ -96,15 +98,13 @@ public class MainActivity extends AppCompatActivity {
             "}, 100);";
 
     private static final String JS_GET_CURRENT_TIME = "" +
-            "(() => {" +
-            "    if (typeof player != \"undefined\" && player != null) {" +
-            "        var currentTime = 0;" +
-            "        try {" +
-            "            currentTime = player.getCurrentTime();" +
-            "        } catch (e) {}" +
-            "        return currentTime;" +
-            "    }" +
-            "})()";
+            "if (typeof player != \"undefined\" && player != null) {" +
+            "    var currentTime = 0;" +
+            "    try {" +
+            "        currentTime = player.getCurrentTime();" +
+            "    } catch (e) {}" +
+            "    currentTime;" +
+            "}";
 
     private static final String JS_NEXT_VIDEO = "javascript:" + PLAYER + ".seekTo(" + PLAYER + ".getDuration())";
     private static final String JS_PAUSE_VIDEO = "javascript:" + PLAYER + ".pauseVideo()";
@@ -191,8 +191,9 @@ public class MainActivity extends AppCompatActivity {
     private static final Typeface TYPEFACE_DEFAULT_BOLD_ITALIC = Typeface.defaultFromStyle(Typeface.BOLD_ITALIC);
 
     private boolean floatingLyrics = true;
+    private boolean hasEverPlayed = false;
     private boolean isCustomViewShowed = false;
-    private boolean isPlaying = false;
+    private boolean isPaused = false;
     private boolean isScreenOff = false;
     private boolean shouldSetSkippings = false;
     private boolean shouldGetDuration = false;
@@ -206,10 +207,11 @@ public class MainActivity extends AppCompatActivity {
     private int indexOfNextLyricsLine = 1;
     int playerState = 0;
     private LinearLayout llCustom;
+    private LinearLayout llNoLyricsWarning;
     private LinearLayout llWebView;
     private ListView lvLyrics;
     long duration = 0L;
-    private LyricsLine[] lyrics;
+    private LyricsLine[] lyrics = new LyricsLine[0];
     private LyricsLine nextLyricsLine;
     MediaSessionCompat mediaSession;
     private MediaWebView player;
@@ -227,6 +229,56 @@ public class MainActivity extends AppCompatActivity {
     private View frontView;
     private WebView webView;
     private WindowManager windowManager;
+
+    private final BroadcastReceiver mediaControlsReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            String action = intent.getAction();
+            switch (action) {
+                case ACTION_PLAY:
+                    player.loadUrl(JS_PLAY_VIDEO);
+                    break;
+                case ACTION_PAUSE:
+                    player.loadUrl(JS_PAUSE_VIDEO);
+                    break;
+                case ACTION_NEXT:
+                    player.loadUrl(JS_NEXT_VIDEO);
+                    break;
+                case ACTION_LYRICS:
+                    floatingLyrics = !floatingLyrics;
+                    tvFloatingLyrics.setVisibility(floatingLyrics ? View.VISIBLE : View.GONE);
+                    break;
+            }
+            abortBroadcast();
+        }
+    };
+
+    private final BroadcastReceiver screenReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            String action = intent.getAction();
+            switch (action) {
+                case Intent.ACTION_SCREEN_OFF:
+                    sendScreenNotification();
+                    isScreenOff = true;
+                    break;
+                case Intent.ACTION_USER_PRESENT:
+                    sendNotification();
+                    isScreenOff = false;
+                    break;
+            }
+            abortBroadcast();
+        }
+    };
+
+    private final AdapterView.OnItemClickListener onLyricsItemClickListener = (parent, view, position, id) -> {
+        if (0 < position && position < lyrics.length - 1) {
+            seekTo(lyrics[position].time);
+            scrollToLyricsLine(position);
+            highlightLyricsLine(position);
+            tvFloatingLyrics.setText(stylizeLyrics(lyrics[position].lyrics));
+        }
+    };
 
     private final ServiceConnection connection = new ServiceConnection() {
         @Override
@@ -285,10 +337,11 @@ public class MainActivity extends AppCompatActivity {
                         line = stylizeLyrics(line);
                         lyricsLinePure = line;
                         tvFloatingLyrics.setText(line);
-                        scrollToLyricsLine(indexOfNextLyricsLine);
-                        highlightLyricsLine(indexOfNextLyricsLine);
                         if (isScreenOff) {
                             sendScreenNotification();
+                        } else {
+                            scrollToLyricsLine(indexOfNextLyricsLine);
+                            highlightLyricsLine(indexOfNextLyricsLine);
                         }
                         if (++indexOfNextLyricsLine < lyrics.length) {
                             nextLyricsLine = lyrics[indexOfNextLyricsLine];
@@ -335,7 +388,59 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
+    private final WebChromeClient playerChromeClient = new WebChromeClient() {
+        @Override
+        public void onReceivedTitle(WebView view, String title) {
+            title = title.replace(" - YouTube", "");
+            MainActivity.this.title = title;
+            tvTitle.setText(title);
+            if (isScreenOff) {
+                sendScreenNotification();
+            } else {
+                sendNotification();
+            }
+            super.onReceivedTitle(view, title);
+        }
+
+        @Override
+        public void onHideCustomView() {
+            super.onHideCustomView();
+            llCustom.removeAllViews();
+            if (isPaused) {
+                isCustomViewShowed = false;
+            } else {
+                toggleFullScreen();
+            }
+        }
+
+        @Override
+        public void onShowCustomView(View view, CustomViewCallback callback) {
+            super.onShowCustomView(view, callback);
+            llCustom.addView(view);
+            bringToFront(flFullScreen);
+            isCustomViewShowed = true;
+        }
+    };
+
     private final WebViewClient playerViewClient = new WebViewClient() {
+        @Override
+        public void doUpdateVisitedHistory(WebView view, String url, boolean isReload) {
+            if (url.startsWith(HOME_PAGE_URL) && !HOME_PAGE_URL.equals(url)) {
+                String v = isVideo(url);
+                if (v == null) { // Loads feed
+                    view.goBack();
+                    shouldSeekToLastPosition = true;
+                    webView.loadUrl(url);
+                    bringToFront(webView);
+                } else if (!nowPlaying.equals(v)) { // Loads another video
+                    lastPosition = 0;
+                    prepareNewVideo(v);
+                }
+                prepareTodoList();
+            }
+            super.doUpdateVisitedHistory(view, url, isReload);
+        }
+
         @Override
         public void onPageFinished(WebView view, String url) {
             view.getSettings().setBlockNetworkImage(false);
@@ -361,51 +466,6 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
-    private final WebChromeClient playerChromeClient = new WebChromeClient() {
-        @Override
-        public void onReceivedTitle(WebView view, String title) {
-            String url = view.getUrl();
-            if (url.startsWith(HOME_PAGE_URL) && !HOME_PAGE_URL.equals(url)) {
-                String v = isVideo(url);
-                if (v == null) { // Loads feed
-                    view.goBack();
-                    shouldSeekToLastPosition = true;
-                    webView.loadUrl(url);
-                    bringToFront(webView);
-                } else if (!nowPlaying.equals(v)) { // Loads another video
-                    lastPosition = 0;
-                    prepareNewVideo(v);
-                }
-                prepareTodoList();
-                title = title.replace(" - YouTube", "");
-                MainActivity.this.title = title;
-                tvTitle.setText(title);
-                if (isScreenOff) {
-                    sendScreenNotification();
-                } else {
-                    sendNotification();
-                }
-            }
-            super.onReceivedTitle(view, title);
-        }
-
-        @Override
-        public void onHideCustomView() {
-            super.onHideCustomView();
-            isCustomViewShowed = false;
-            llCustom.removeAllViews();
-            bringToFront(player);
-        }
-
-        @Override
-        public void onShowCustomView(View view, CustomViewCallback callback) {
-            super.onShowCustomView(view, callback);
-            isCustomViewShowed = true;
-            llCustom.addView(view);
-            bringToFront(flFullScreen);
-        }
-    };
-
     private final WebViewClient viewClient = new WebViewClient() {
         @Override
         public void doUpdateVisitedHistory(WebView view, String url, boolean isReload) {
@@ -413,12 +473,8 @@ public class MainActivity extends AppCompatActivity {
             if (v != null) {
                 view.goBack();
                 player.loadUrl(url.replace("&pbj=1", "").replace("://m.", "://www."));
-                lastPosition = 0;
-                prepareNewVideo(v);
-                prepareTodoList();
                 bringToFront(player);
             }
-            super.doUpdateVisitedHistory(view, url, isReload);
         }
 
         @Override
@@ -439,8 +495,8 @@ public class MainActivity extends AppCompatActivity {
         player.setVisibility(view == player ? View.VISIBLE : View.GONE);
         flFullScreen.setVisibility(view == flFullScreen ? View.VISIBLE : View.GONE);
         frontView = view;
-        if (floatingLyrics && tvFloatingLyrics != null) {
-            tvFloatingLyrics.setVisibility(view == flFullScreen ? View.GONE : View.VISIBLE);
+        if (floatingLyrics && lyrics.length > 0) {
+            tvFloatingLyrics.setVisibility(view != flFullScreen || lvLyrics.getVisibility() == View.GONE ? View.VISIBLE : View.GONE);
         }
     }
 
@@ -456,14 +512,6 @@ public class MainActivity extends AppCompatActivity {
             tvLyricsLines[indexOfHighlightedLyricsLine].setTextColor(Color.WHITE);
             tvLyricsLines[indexOfHighlightedLyricsLine].setTypeface(TYPEFACE_DEFAULT_BOLD_ITALIC);
         }
-    }
-
-    private static String isVideo(String url) {
-        Matcher m = PATTERN_VIDEO_URL.matcher(url);
-        if (m.find()) {
-            return m.group("v");
-        }
-        return null;
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -485,6 +533,27 @@ public class MainActivity extends AppCompatActivity {
         ws.setUseWideViewPort(true);
     }
 
+    private static String isVideo(String url) {
+        Matcher m = PATTERN_VIDEO_URL.matcher(url);
+        if (m.find()) {
+            return m.group("v");
+        }
+        return null;
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (frontView == webView) {
+            if (webView.canGoBack()) {
+                webView.goBack();
+            } else {
+                moveTaskToBack(false);
+            }
+        } else if (frontView == player || frontView == flFullScreen) {
+            bringToFront(webView);
+        }
+    }
+
     @SuppressLint({"RemoteViewLayout", "JavascriptInterface", "InvalidWakeLockTag"})
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -494,24 +563,20 @@ public class MainActivity extends AppCompatActivity {
         bNextVideo = findViewById(R.id.b_next_video);
         bPlayPause = findViewById(R.id.b_play_pause);
         flFullScreen = findViewById(R.id.fl_full_screen);
-        llWebView = findViewById(R.id.ll_webview);
         llCustom = findViewById(R.id.ll_custom);
+        llNoLyricsWarning = findViewById(R.id.ll_no_lyrics_warning);
+        llWebView = findViewById(R.id.ll_webview);
         lvLyrics = findViewById(R.id.lv_lyrics);
         pbProgress = findViewById(R.id.pb_progress);
         tvTitle = findViewById(R.id.tv_title);
 
         // Initial views
         bNextVideo.setTypeface(Typeface.createFromAsset(getAssets(), "Player.ttf"));
+        bNextVideo.setOnClickListener(v -> player.loadUrl(JS_NEXT_VIDEO));
         bPlayPause.setTypeface(Typeface.createFromAsset(getAssets(), "Player.ttf"));
         bPlayPause.setOnClickListener(v -> toggleState());
-        lvLyrics.setOnItemClickListener((parent, view, position, id) -> {
-            if (0 < position && position < lyrics.length - 1) {
-                seekTo(lyrics[position].time);
-                scrollToLyricsLine(position);
-                highlightLyricsLine(position);
-                tvFloatingLyrics.setText(stylizeLyrics(lyrics[position].lyrics));
-            }
-        });
+        lvLyrics.setOnItemClickListener(onLyricsItemClickListener);
+        findViewById(R.id.tv_ignore_lyrics).setOnClickListener(v -> llNoLyricsWarning.setVisibility(View.GONE));
 
         // Initial WebViews
         webView = new WebView(this);
@@ -572,28 +637,7 @@ public class MainActivity extends AppCompatActivity {
                         new Intent(ACTION_NEXT),
                         PendingIntent.FLAG_UPDATE_CURRENT))
                 .build();
-        registerReceiver(new BroadcastReceiver() {
-            @Override
-            public void onReceive(Context context, Intent intent) {
-                String action = intent.getAction();
-                switch (action) {
-                    case ACTION_PLAY:
-                        player.loadUrl(JS_PLAY_VIDEO);
-                        break;
-                    case ACTION_PAUSE:
-                        player.loadUrl(JS_PAUSE_VIDEO);
-                        break;
-                    case ACTION_NEXT:
-                        player.loadUrl(JS_NEXT_VIDEO);
-                        break;
-                    case ACTION_LYRICS:
-                        floatingLyrics = !floatingLyrics;
-                        tvFloatingLyrics.setVisibility(floatingLyrics ? View.VISIBLE : View.GONE);
-                        break;
-                }
-                abortBroadcast();
-            }
-        }, notificationIntentFilter);
+        registerReceiver(mediaControlsReceiver, notificationIntentFilter);
         mediaSession = new MediaSessionCompat(this, "PlayService");
         mediaSession.setMetadata(new MediaMetadataCompat.Builder()
                 .putString(MediaMetadataCompat.METADATA_KEY_TITLE, YOUTUBE_MUSIC)
@@ -606,23 +650,7 @@ public class MainActivity extends AppCompatActivity {
         IntentFilter screenIntentFilter = new IntentFilter();
         screenIntentFilter.addAction(Intent.ACTION_SCREEN_OFF);
         screenIntentFilter.addAction(Intent.ACTION_USER_PRESENT);
-        registerReceiver(new BroadcastReceiver() {
-            @Override
-            public void onReceive(Context context, Intent intent) {
-                String action = intent.getAction();
-                switch (action) {
-                    case Intent.ACTION_SCREEN_OFF:
-                        sendScreenNotification();
-                        isScreenOff = true;
-                        break;
-                    case Intent.ACTION_USER_PRESENT:
-                        sendNotification();
-                        isScreenOff = false;
-                        break;
-                }
-                abortBroadcast();
-            }
-        }, screenIntentFilter);
+        registerReceiver(screenReceiver, screenIntentFilter);
 
         // Start timer
         lyricsTimer = new Timer();
@@ -638,46 +666,50 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
-    public void onBackPressed() {
-        if (frontView == webView) {
-            if (webView.canGoBack()) {
-                webView.goBack();
-            } else {
-                moveTaskToBack(false);
-            }
-        } else if (frontView == player || frontView == flFullScreen) {
-            bringToFront(webView);
-        }
-    }
-
-    @Override
     protected void onPause() {
+        isPaused = true;
         if (isCustomViewShowed) {
             toggleFullScreen();
         }
         super.onPause();
     }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (!isCustomViewShowed) {
+            toggleFullScreen();
+        }
+        isPaused = false;
+    }
+
     @JavascriptInterface
     public void onStateChange(int data) {
-        bPlayPause.setText(data == PLAYER_STATE_PLAYING ? "⏸" : "⏵");
         playerState = data;
+
         if (data == PLAYER_STATE_PLAYING) {
+            bPlayPause.setText("⏸");
             shouldUpdateIndexOfLyricsLineFromCurrentTime = true;
+        } else {
+            bPlayPause.setText("⏵");
         }
+
         if (isScreenOff) {
             sendScreenNotification();
         } else {
             sendNotification();
         }
+
     }
 
     public void onTitleClick(View view) {
-        if (isPlaying) {
+        if (hasEverPlayed) {
             if (frontView == webView) {
                 bringToFront(isCustomViewShowed ? flFullScreen : player);
             } else {
-                toggleFullScreen();
+                if (lyrics.length > 0) {
+                    setLyricsViewVisibility(lvLyrics.getVisibility() != View.VISIBLE);
+                }
             }
         }
     }
@@ -688,7 +720,7 @@ public class MainActivity extends AppCompatActivity {
         player.loadUrl(jsSetSkippings);
         readLyrics(v);
         nowPlaying = v;
-        isPlaying = true;
+        hasEverPlayed = true;
         seekTo(0.0f);
     }
 
@@ -696,6 +728,7 @@ public class MainActivity extends AppCompatActivity {
         shouldGetDuration = true;
         shouldSeekToLastPosition = false;
         shouldSetSkippings = true;
+        Log.d("sk", "================\n================\n================\n================\n");
         shouldToggleFullScreen = !isCustomViewShowed;
     }
 
@@ -715,10 +748,12 @@ public class MainActivity extends AppCompatActivity {
         lvLyrics.setVisibility(View.GONE);
         lvLyrics.setAdapter(null);
         tvLyricsLines = new TextView[0];
+        llNoLyricsWarning.setVisibility(View.GONE);
         StringBuilder skippings = new StringBuilder();
         File file = new File("/sdcard" + "/YTMusic/lyrics/" + v + ".lrc");
         if (!file.exists()) {
             tvFloatingLyrics.setText("");
+            llNoLyricsWarning.setVisibility(View.VISIBLE);
             return;
         }
         try (BufferedReader br = new BufferedReader(new FileReader(file))) {
@@ -755,7 +790,7 @@ public class MainActivity extends AppCompatActivity {
             lvLyrics.setAdapter(new LyricsAdapter(this, lyricsMap.stream().map(ll -> purifyLyrics(ll.lyrics)).collect(Collectors.toList())));
 
             lvLyrics.scrollTo(0, 0);
-            lvLyrics.setVisibility(View.VISIBLE);
+            setLyricsViewVisibility(true);
         }
         if (!"".equals(skippings.toString())) {
             jsSetSkippings = String.format(JS_SET_SKIPPINGS, skippings.substring(2));
@@ -795,6 +830,13 @@ public class MainActivity extends AppCompatActivity {
         Integer color = colorNameMap.get(style);
         if (color != null) {
             tvFloatingLyrics.setTextColor(color);
+        }
+    }
+
+    private void setLyricsViewVisibility(boolean visible) {
+        lvLyrics.setVisibility(visible ? View.VISIBLE : View.GONE);
+        if (floatingLyrics) {
+            tvFloatingLyrics.setVisibility(visible ? View.GONE : View.VISIBLE);
         }
     }
 
