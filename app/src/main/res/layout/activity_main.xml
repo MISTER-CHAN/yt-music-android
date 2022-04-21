@@ -8,16 +8,89 @@
     tools:context=".MainActivity">
 
     <LinearLayout
-        android:id="@+id/ll_webview"
+        android:id="@+id/ll_main"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
         android:orientation="vertical">
 
-        <FrameLayout
-            android:id="@+id/fl_full_screen"
+        <LinearLayout
+            android:id="@+id/ll_webview"
             android:layout_width="match_parent"
-            android:layout_height="match_parent">
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:orientation="vertical" />
+
+
+        <LinearLayout
+            android:id="@+id/ll_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/white"
+            android:gravity="center"
+            android:onClick="onTitleClick"
+            android:padding="8dp">
+
+            <TextView
+                android:id="@+id/tv_title"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:maxLines="1"
+                android:text="YouTube Music"
+                android:textColor="@color/black"
+                android:textSize="16sp" />
+
+            <Button
+                android:id="@+id/b_play_pause"
+                style="?android:attr/buttonBarButtonStyle"
+                android:layout_width="48dp"
+                android:layout_height="wrap_content"
+                android:text="⏵"
+                android:textColor="@color/black"
+                android:textSize="24sp" />
+
+            <Button
+                android:id="@+id/b_next_video"
+                style="?android:attr/buttonBarButtonStyle"
+                android:layout_width="48dp"
+                android:layout_height="wrap_content"
+                android:text="⏭"
+                android:textColor="@color/black"
+                android:textSize="24sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/ll_full_screen"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:id="@+id/ll_fullscreen_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/black"
+            android:orientation="horizontal"
+            android:padding="8dp">
+
+            <TextView
+                android:id="@+id/tv_fullscreen_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:maxLines="1"
+                android:text="YouTube Music"
+                android:textColor="@color/white"
+                android:textSize="16sp" />
+        </LinearLayout>
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
 
             <LinearLayout
                 android:id="@+id/ll_custom"
@@ -31,7 +104,9 @@
                 android:layout_height="match_parent"
                 android:background="#88000000"
                 android:divider="#00000000"
-                android:dividerHeight="0dp" />
+                android:dividerHeight="0dp"
+                android:fadingEdgeLength="256dp"
+                android:requiresFadingEdge="vertical" />
 
             <LinearLayout
                 android:id="@+id/ll_no_lyrics_warning"
@@ -59,8 +134,35 @@
                     android:text="忽略"
                     android:textColor="#FF7F7FFF" />
             </LinearLayout>
-
         </FrameLayout>
+
+        <LinearLayout
+            android:id="@+id/ll_fullscreen_controls"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/black"
+            android:gravity="end|center_vertical"
+            android:onClick="onFullscreenTitleClick"
+            android:padding="8dp">
+
+            <Button
+                android:id="@+id/b_fullscreen_play_pause"
+                style="?android:attr/buttonBarButtonStyle"
+                android:layout_width="48dp"
+                android:layout_height="wrap_content"
+                android:text="⏵"
+                android:textColor="@color/white"
+                android:textSize="24sp" />
+
+            <Button
+                android:id="@+id/b_fullscreen_next_video"
+                style="?android:attr/buttonBarButtonStyle"
+                android:layout_width="48dp"
+                android:layout_height="wrap_content"
+                android:text="⏭"
+                android:textColor="@color/white"
+                android:textSize="24sp" />
+        </LinearLayout>
     </LinearLayout>
 
     <ProgressBar
@@ -68,42 +170,4 @@
         style="@style/Widget.AppCompat.ProgressBar.Horizontal"
         android:layout_width="match_parent"
         android:layout_height="1dp" />
-
-    <LinearLayout
-        android:id="@+id/ll_title"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="@color/white"
-        android:gravity="center"
-        android:onClick="onTitleClick"
-        android:padding="8dp">
-
-        <TextView
-            android:id="@+id/tv_title"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:maxLines="1"
-            android:text="YouTube Music"
-            android:textColor="@color/black"
-            android:textSize="16sp" />
-
-        <Button
-            android:id="@+id/b_play_pause"
-            style="?android:attr/buttonBarButtonStyle"
-            android:layout_width="48dp"
-            android:layout_height="wrap_content"
-            android:text="⏵"
-            android:textColor="@color/black"
-            android:textSize="24sp" />
-
-        <Button
-            android:id="@+id/b_next_video"
-            style="?android:attr/buttonBarButtonStyle"
-            android:layout_width="48dp"
-            android:layout_height="wrap_content"
-            android:text="⏭"
-            android:textColor="@color/black"
-            android:textSize="24sp" />
-    </LinearLayout>
 </LinearLayout>

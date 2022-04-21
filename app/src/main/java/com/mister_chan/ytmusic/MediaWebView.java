@@ -9,6 +9,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 public class MediaWebView extends WebView {
+
     public MediaWebView(@NonNull Context context) {
         super(context);
     }
@@ -23,13 +24,12 @@ public class MediaWebView extends WebView {
 
     @Override
     public void onPause() {
-
     }
 
     @Override
     protected void onWindowVisibilityChanged(int visibility) {
         if (visibility != View.GONE) {
-            super.onWindowVisibilityChanged(View.VISIBLE);
+            super.onWindowVisibilityChanged(visibility);
         }
     }
 }

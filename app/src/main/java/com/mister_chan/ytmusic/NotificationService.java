@@ -42,7 +42,7 @@ public class NotificationService extends Service {
         stopService(new Intent(this, NotificationService.class));
     }
 
-    void sendNotification(MainActivity ma) {
+    void sendNotification(MainActivity ma, String title) {
         float playbackSpeed;
         Intent intent = new Intent();
         NotificationCompat.Action playPauseAction;
@@ -58,7 +58,7 @@ public class NotificationService extends Service {
             playbackSpeed = 0;
         }
         ma.mediaSession.setMetadata(new MediaMetadataCompat.Builder()
-                .putString(MediaMetadataCompat.METADATA_KEY_TITLE, ma.title)
+                .putString(MediaMetadataCompat.METADATA_KEY_TITLE, title)
                 .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, ma.duration * 1000)
                 .build()
         );
@@ -81,11 +81,22 @@ public class NotificationService extends Service {
         NotificationManagerCompat.from(this).notify(1, notification);
     }
 
-    void sendScreenNotification(NotificationCompat.Action playPause, NotificationCompat.Action next, String title, String lyrics) {
+    void sendScreenNotification(MainActivity ma, String title) {
+        Intent intent = new Intent();
+        NotificationCompat.Action playPauseAction;
+        if (ma.playerState == MainActivity.PLAYER_STATE_PLAYING) {
+            intent.setAction(MainActivity.ACTION_PAUSE);
+            PendingIntent pendingIntent = PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
+            playPauseAction = new NotificationCompat.Action.Builder(R.drawable.ic_pause, "Pause", pendingIntent).build();
+        } else {
+            intent.setAction(MainActivity.ACTION_PLAY);
+            PendingIntent pendingIntent = PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
+            playPauseAction = new NotificationCompat.Action.Builder(R.drawable.ic_play, "Play", pendingIntent).build();
+        }
         notification = new NotificationCompat.Builder(this, "channel")
-                .addAction(playPause)
-                .addAction(next)
-                .setContentText(lyrics)
+                .addAction(playPauseAction)
+                .addAction(ma.nextAction)
+                .setContentText(ma.lyricsLinePure)
                 .setContentTitle(title)
                 .setOngoing(true)
                 .setSmallIcon(R.drawable.ic_launcher_foreground)
