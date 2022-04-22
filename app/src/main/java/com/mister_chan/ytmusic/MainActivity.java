@@ -18,6 +18,7 @@ import android.os.Bundle;
 import android.os.IBinder;
 import android.support.v4.media.MediaMetadataCompat;
 import android.support.v4.media.session.MediaSessionCompat;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
@@ -90,10 +91,17 @@ public class MainActivity extends AppCompatActivity {
     private static final String YOUTUBE_MUSIC = "YouTube Music";
 
     private static final String JS_ADD_ON_STATE_CHANGE_LISTENER = "javascript:" +
+            "var cancelPauses = false;" +
+            "var onStateChange = (data) => {" +
+            "    if (cancelPauses && data == 2) {" +
+            "        player.playVideo();" +
+            "    }" +
+            "    mainActivity.onStateChange(data);" +
+            "};" +
             "var addOnStateChangeListenerTimer = setInterval(() => {" +
             "    if (typeof player != \"undefined\" && player != null) {" +
             "        clearInterval(addOnStateChangeListenerTimer);" +
-            "        player.addEventListener(\"onStateChange\", data => mainActivity.onStateChange(data));" +
+            "        player.addEventListener(\"onStateChange\", data => onStateChange(data));" +
             "    }" +
             "}, 100);";
 
@@ -182,15 +190,21 @@ public class MainActivity extends AppCompatActivity {
             "            } else if (!player.isMuted()) {" +
             "                player.mute();" +
             "                isPlayingAd = true;" +
-            "                mainActivity.sendNotification(\"廣告\");" +
+            "                mainActivity.setPlayingAd(true);" +
+            "                mainActivity.sendNotification();" +
             "            }" +
             "        } else if (isPlayingAd) {" +
             "            isPlayingAd = false;" +
             "            player.unMute();" +
+            "            mainActivity.setPlayingAd(false);" +
             "            mainActivity.sendNotification();" +
             "        }" +
             "    }" +
             "}, 100);";
+
+    private static final String JS_START_CANCELLING_PAUSES = "javascript:" +
+            "cancelPauses = true;" +
+            "setTimeout(() => cancelPauses = false, 1000);";
 
     private static final String JS_TOGGLE_FULLSCREEN = "javascript:" +
             "if (typeof player != \"undefined\" && player != null) {" +
@@ -226,6 +240,7 @@ public class MainActivity extends AppCompatActivity {
     private boolean floatingLyrics = true;
     private boolean hasEverPlayed = false;
     private boolean isCustomViewShowed = false;
+    private boolean isPlayingAd = false;
     private boolean isScreenOff = false;
     private boolean shouldSetSkippings = false;
     private boolean shouldGetDuration = false;
@@ -253,6 +268,7 @@ public class MainActivity extends AppCompatActivity {
     private MediaWebView player;
     NotificationCompat.Action lyricsAction, nextAction;
     private NotificationService notificationService;
+    private ProgressBar pbFullscreenProgress;
     private ProgressBar pbProgress;
     private String title = YOUTUBE_MUSIC;
     private String jsSetSkippings = JS_SET_NO_SKIPPINGS;
@@ -295,11 +311,11 @@ public class MainActivity extends AppCompatActivity {
             String action = intent.getAction();
             switch (action) {
                 case Intent.ACTION_SCREEN_OFF:
-                    notificationService.sendScreenNotification(MainActivity.this, title);
+                    notificationService.sendScreenNotification(MainActivity.this, getTitleForNotification());
                     isScreenOff = true;
                     break;
                 case Intent.ACTION_USER_PRESENT:
-                    notificationService.sendNotification(MainActivity.this, title);
+                    notificationService.sendNotification(MainActivity.this, getTitleForNotification());
                     isScreenOff = false;
                     break;
             }
@@ -341,6 +357,7 @@ public class MainActivity extends AppCompatActivity {
                     return;
                 }
                 float currentTime = Float.parseFloat(value);
+                pbFullscreenProgress.setProgress((int) currentTime);
                 pbProgress.setProgress((int) currentTime);
                 if (currentTime <= 0) {
                     return;
@@ -373,7 +390,7 @@ public class MainActivity extends AppCompatActivity {
                         lyricsLinePure = line;
                         tvFloatingLyrics.setText(line);
                         if (isScreenOff) {
-                            notificationService.sendScreenNotification(MainActivity.this, title);
+                            notificationService.sendScreenNotification(MainActivity.this, getTitleForNotification());
                         } else {
                             scrollToLyricsLine(indexOfNextLyricsLine);
                             highlightLyricsLine(indexOfNextLyricsLine);
@@ -406,6 +423,7 @@ public class MainActivity extends AppCompatActivity {
                             }
                             shouldGetDuration = false;
                             duration = (long) Float.parseFloat(value);
+                            pbFullscreenProgress.setMax((int) duration);
                             pbProgress.setMax((int) duration);
                             if (!isScreenOff) {
                                 sendNotification();
@@ -438,14 +456,18 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onHideCustomView() {
             llCustom.removeAllViews();
-            bringToFront(player);
+            if (frontView == llFullscreen) {
+                bringToFront(player);
+            }
             isCustomViewShowed = false;
         }
 
         @Override
         public void onShowCustomView(View view, CustomViewCallback callback) {
             llCustom.addView(view);
-            bringToFront(llFullscreen);
+            if (frontView == player) {
+                bringToFront(llFullscreen);
+            }
             isCustomViewShowed = true;
         }
     };
@@ -546,6 +568,12 @@ public class MainActivity extends AppCompatActivity {
         frontView = view;
     }
 
+    private String getTitleForNotification() {
+        return isPlayingAd ? "廣告"
+                : playerState == PLAYER_STATE_BUFFERING ? "緩衝中……"
+                : title;
+    }
+
     private void highlightLyricsLine(int index) {
         if ((0 < indexOfHighlightedLyricsLine && indexOfHighlightedLyricsLine < lyrics.length - 1)
                 && tvLyricsLines[indexOfHighlightedLyricsLine] != null) {
@@ -604,6 +632,7 @@ public class MainActivity extends AppCompatActivity {
         llNoLyricsWarning = findViewById(R.id.ll_no_lyrics_warning);
         llWebView = findViewById(R.id.ll_webview);
         lvLyrics = findViewById(R.id.lv_lyrics);
+        pbFullscreenProgress = findViewById(R.id.pb_fullscreen_progress);
         pbProgress = findViewById(R.id.pb_progress);
         tvFullscreenTitle = findViewById(R.id.tv_fullscreen_title);
         tvTitle = findViewById(R.id.tv_title);
@@ -734,18 +763,12 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onPause() {
-        if (isCustomViewShowed) {
-            setFullscreen(false);
-        }
+        player.loadUrl(JS_START_CANCELLING_PAUSES);
         super.onPause();
     }
 
     @Override
     protected void onResume() {
-        if (!isCustomViewShowed) {
-            shouldFullScreen = false;
-            setFullscreen(true);
-        }
         super.onResume();
     }
 
@@ -778,6 +801,7 @@ public class MainActivity extends AppCompatActivity {
         player.loadUrl("javascript:clearInterval(skippingTimer);");
         jsSetSkippings = JS_SET_NO_SKIPPINGS;
         player.loadUrl(jsSetSkippings);
+        isPlayingAd = false;
         readLyrics(v);
         nowPlaying = v;
         hasEverPlayed = true;
@@ -868,11 +892,10 @@ public class MainActivity extends AppCompatActivity {
 
     @JavascriptInterface
     public void sendNotification() {
-        notificationService.sendNotification(this, title);
+        sendNotification(getTitleForNotification());
     }
 
-    @JavascriptInterface
-    public void sendNotification(String title) {
+    private void sendNotification(String title) {
         if (isScreenOff) {
             notificationService.sendScreenNotification(this, title);
         } else {
@@ -896,6 +919,11 @@ public class MainActivity extends AppCompatActivity {
         if (floatingLyrics) {
             tvFloatingLyrics.setVisibility(visible ? View.GONE : View.VISIBLE);
         }
+    }
+
+    @JavascriptInterface
+    public void setPlayingAd(boolean playingAd) {
+        isPlayingAd = playingAd;
     }
 
     private String stylizeLyrics(String lyrics) {
