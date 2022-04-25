@@ -1,5 +1,7 @@
 package com.mister_chan.ytmusic;
 
+import android.graphics.Color;
+import android.graphics.Typeface;
 import android.util.TypedValue;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -14,6 +16,9 @@ import androidx.annotation.Nullable;
 import java.util.List;
 
 public class LyricsAdapter extends ArrayAdapter<String> {
+
+    private static final Typeface TYPEFACE_DEFAULT_BOLD_ITALIC = Typeface.defaultFromStyle(Typeface.BOLD_ITALIC);
+
     private final int pxOf512Dp = (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 512, getContext().getResources().getDisplayMetrics());
     private final MainActivity mainActivity;
     private final List<String> lyricsLines;
@@ -32,6 +37,11 @@ public class LyricsAdapter extends ArrayAdapter<String> {
             TextView tvLyricsLine = llLyricsLine.findViewById(R.id.tv_lyrics);
             mainActivity.tvLyricsLines[position] = tvLyricsLine;
             tvLyricsLine.setText(lyricsLines.get(position));
+            if (position == mainActivity.indexOfHighlightedLyricsLine) {
+                tvLyricsLine.setTextSize(24.0f);
+                tvLyricsLine.setTextColor(Color.WHITE);
+                tvLyricsLine.setTypeface(TYPEFACE_DEFAULT_BOLD_ITALIC);
+            }
             return llLyricsLine;
         } else {
             View view = new View(mainActivity);

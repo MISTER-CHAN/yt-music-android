@@ -69,14 +69,6 @@ public class MainActivity extends AppCompatActivity {
             PLAYER_STATE_BUFFERING = 3,
             PLAYER_STATE_CUED = 5;
 
-    private static final Map<String, Integer> colorNameMap = new HashMap<String, Integer>() {
-        {
-            put("RED", Color.RED);
-            put("GREEN", Color.GREEN);
-            put("BLUE", Color.BLUE);
-        }
-    };
-
     private static final Pattern PATTERN_LYRICS = Pattern.compile("\\[(?<min>\\d{2}):(?<sec>\\d{2})\\.(?<centisec>\\d{2})\\](?:\\[\\d{2}:\\d{2}\\.\\d{2}\\])*(?<lrc>[^\\[\\]]+)$");
     private static final Pattern PATTERN_VIDEO_URL = Pattern.compile("^https?://(?:www|m)\\.youtube\\.com/.*[?&]v=(?<v>[-0-9A-Z_a-z]+)");
 
@@ -252,7 +244,7 @@ public class MainActivity extends AppCompatActivity {
     private Button bNextVideo;
     private Button bPlayPause;
     float lastPosition = 0f;
-    private int indexOfHighlightedLyricsLine = -1;
+    int indexOfHighlightedLyricsLine = -1;
     private int indexOfNextLyricsLine = 1;
     int playerState = 0;
     private LinearLayout llCustom;
@@ -812,11 +804,16 @@ public class MainActivity extends AppCompatActivity {
         shouldGetDuration = true;
         shouldSeekToLastPosition = false;
         shouldSetSkippings = true;
-        shouldFullScreen = true;
+        shouldFullScreen = !isCustomViewShowed;
     }
 
     private String purifyLyrics(String lyrics) {
-        return lyrics.replaceAll("\\{.*\\}", "");
+        char c = '\0';
+        if (lyrics.length() >= 3 && lyrics.charAt(1) == ':' && lyrics.charAt(2) == ' '
+                && ((c = lyrics.charAt(0)) == 'L') || c == 'M' || c == 'D') {
+            return lyrics.substring(3);
+        }
+        return lyrics;
     }
 
     private void readLyrics(String v) {
@@ -870,7 +867,8 @@ public class MainActivity extends AppCompatActivity {
             nextLyricsLine = lyrics[0];
 
             tvLyricsLines = new TextView[lyrics.length];
-            lvLyrics.setAdapter(new LyricsAdapter(this, lyricsMap.stream().map(ll -> purifyLyrics(ll.lyrics)).collect(Collectors.toList())));
+            lvLyrics.setAdapter(new LyricsAdapter(this,
+                    lyricsMap.stream().map(ll -> purifyLyrics(ll.lyrics)).collect(Collectors.toList())));
 
             lvLyrics.scrollTo(0, 0);
             setLyricsViewVisibility(true);
@@ -882,7 +880,8 @@ public class MainActivity extends AppCompatActivity {
 
     private void scrollToLyricsLine(int index) {
         if ((0 < index && index < lyrics.length - 1) && tvLyricsLines[index] != null) {
-            lvLyrics.smoothScrollToPositionFromTop(index, (lvLyrics.getHeight() >> 1) - (tvLyricsLines[index].getHeight() >> 1));
+            lvLyrics.smoothScrollToPositionFromTop(index,
+                    (lvLyrics.getHeight() >> 1) - (tvLyricsLines[index].getHeight() >> 1));
         }
     }
 
@@ -907,13 +906,6 @@ public class MainActivity extends AppCompatActivity {
         player.loadUrl(fullscreen ? JS_FULLSCREEN : JS_EXIT_FULLSCREEN);
     }
 
-    private void setLyricsStyle(String style) {
-        Integer color = colorNameMap.get(style);
-        if (color != null) {
-            tvFloatingLyrics.setTextColor(color);
-        }
-    }
-
     private void setLyricsViewVisibility(boolean visible) {
         lvLyrics.setVisibility(visible ? View.VISIBLE : View.GONE);
         if (floatingLyrics) {
@@ -927,11 +919,22 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private String stylizeLyrics(String lyrics) {
-        Matcher matcher = Pattern.compile("\\{(?<style>[^{}]*)\\}").matcher(lyrics);
-        while (matcher.find()) {
-            setLyricsStyle(matcher.group("style"));
+        if (lyrics.length() >= 3 && lyrics.charAt(1) == ':' && lyrics.charAt(2) == ' ') {
+            switch (lyrics.charAt(0)) {
+                case 'M':
+                    tvFloatingLyrics.setTextColor(Color.BLUE);
+                    return lyrics.substring(3);
+                case 'F':
+                    tvFloatingLyrics.setTextColor(Color.RED);
+                    return lyrics.substring(3);
+                case 'D':
+                    tvFloatingLyrics.setTextColor(Color.GREEN);
+                    return lyrics.substring(3);
+                default:
+                    return lyrics;
+            }
         }
-        return purifyLyrics(lyrics);
+        return lyrics;
     }
 
     private void toggleFullscreen() {
