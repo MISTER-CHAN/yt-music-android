@@ -810,7 +810,7 @@ public class MainActivity extends AppCompatActivity {
     private String purifyLyrics(String lyrics) {
         char c = '\0';
         if (lyrics.length() >= 3 && lyrics.charAt(1) == ':' && lyrics.charAt(2) == ' '
-                && ((c = lyrics.charAt(0)) == 'L') || c == 'M' || c == 'D') {
+                && ((c = lyrics.charAt(0)) == 'M') || c == 'F' || c == 'D') {
             return lyrics.substring(3);
         }
         return lyrics;
