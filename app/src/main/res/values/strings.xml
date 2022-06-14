@@ -1,3 +1,7 @@
 <resources>
     <string name="app_name">YT Music</string>
+    <string name="forward_symbol">⏵</string>
+    <string name="next_file_symbol">⏭</string>
+    <string name="pause_symbol">⏸</string>
+    <string name="youtube_music">YouTube Music</string>
 </resources>

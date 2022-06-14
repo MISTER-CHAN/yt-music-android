@@ -24,6 +24,15 @@ public class NotificationService extends Service {
         }
     }
 
+    private static final Long MEDIA_SESSION_ACTIONS = PlaybackStateCompat.ACTION_PLAY
+            | PlaybackStateCompat.ACTION_PAUSE
+            | PlaybackStateCompat.ACTION_PLAY_PAUSE
+            | PlaybackStateCompat.ACTION_SKIP_TO_NEXT;
+
+    private static final String CHANNEL = "channel";
+    private static final String PAUSE = "Pause";
+    private static final String PLAY = "Play";
+
     private final IBinder binder = new NotificationBinder();
     private Notification notification;
 
@@ -33,7 +42,8 @@ public class NotificationService extends Service {
         return binder;
     }
 
-    public NotificationService() {}
+    public NotificationService() {
+    }
 
     @Override
     public void onDestroy() {
@@ -43,30 +53,34 @@ public class NotificationService extends Service {
     }
 
     void sendNotification(MainActivity ma, String title) {
+        int playbackState;
         float playbackSpeed;
         Intent intent = new Intent();
         NotificationCompat.Action playPauseAction;
         if (ma.playerState == MainActivity.PLAYER_STATE_PLAYING) {
+            playbackState = PlaybackStateCompat.STATE_PLAYING;
+            playbackSpeed = 1.0f;
             intent.setAction(MainActivity.ACTION_PAUSE);
             PendingIntent pendingIntent = PendingIntent.getBroadcast(ma, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
-            playPauseAction = new NotificationCompat.Action.Builder(R.drawable.ic_pause, "Pause", pendingIntent).build();
-            playbackSpeed = 1;
+            playPauseAction = new NotificationCompat.Action.Builder(R.drawable.ic_pause, PAUSE, pendingIntent).build();
         } else {
+            playbackState = PlaybackStateCompat.STATE_PAUSED;
+            playbackSpeed = 0.0f;
             intent.setAction(MainActivity.ACTION_PLAY);
             PendingIntent pendingIntent = PendingIntent.getBroadcast(ma, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
-            playPauseAction = new NotificationCompat.Action.Builder(R.drawable.ic_play, "Play", pendingIntent).build();
-            playbackSpeed = 0;
+            playPauseAction = new NotificationCompat.Action.Builder(R.drawable.ic_play, PLAY, pendingIntent).build();
         }
         ma.mediaSession.setMetadata(new MediaMetadataCompat.Builder()
                 .putString(MediaMetadataCompat.METADATA_KEY_TITLE, title)
-                .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, ma.duration * 1000)
+                .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, ma.duration * 1000L)
                 .build()
         );
         ma.mediaSession.setPlaybackState(new PlaybackStateCompat.Builder()
-                .setState(PlaybackStateCompat.STATE_PLAYING, (long) ma.lastPosition * 1000, playbackSpeed)
+                .setState(playbackState, (long) ma.lastPosition * 1000L, playbackSpeed)
+                .setActions(MEDIA_SESSION_ACTIONS)
                 .build()
         );
-        notification = new NotificationCompat.Builder(this, "channel")
+        notification = new NotificationCompat.Builder(this, CHANNEL)
                 .addAction(playPauseAction)
                 .addAction(ma.nextAction)
                 .addAction(ma.lyricsAction)
@@ -82,18 +96,29 @@ public class NotificationService extends Service {
     }
 
     void sendScreenNotification(MainActivity ma, String title) {
+        int playbackState;
+        float playbackSpeed;
         Intent intent = new Intent();
         NotificationCompat.Action playPauseAction;
         if (ma.playerState == MainActivity.PLAYER_STATE_PLAYING) {
+            playbackState = PlaybackStateCompat.STATE_PLAYING;
+            playbackSpeed = 1.0f;
             intent.setAction(MainActivity.ACTION_PAUSE);
             PendingIntent pendingIntent = PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
-            playPauseAction = new NotificationCompat.Action.Builder(R.drawable.ic_pause, "Pause", pendingIntent).build();
+            playPauseAction = new NotificationCompat.Action.Builder(R.drawable.ic_pause, PAUSE, pendingIntent).build();
         } else {
+            playbackState = PlaybackStateCompat.STATE_PAUSED;
+            playbackSpeed = 0.0f;
             intent.setAction(MainActivity.ACTION_PLAY);
             PendingIntent pendingIntent = PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
-            playPauseAction = new NotificationCompat.Action.Builder(R.drawable.ic_play, "Play", pendingIntent).build();
+            playPauseAction = new NotificationCompat.Action.Builder(R.drawable.ic_play, PLAY, pendingIntent).build();
         }
-        notification = new NotificationCompat.Builder(this, "channel")
+        ma.mediaSession.setPlaybackState(new PlaybackStateCompat.Builder()
+                .setState(playbackState, (long) ma.lastPosition * 1000L, playbackSpeed)
+                .setActions(MEDIA_SESSION_ACTIONS)
+                .build()
+        );
+        notification = new NotificationCompat.Builder(this, CHANNEL)
                 .addAction(playPauseAction)
                 .addAction(ma.nextAction)
                 .setContentText(ma.lyricsLinePure)

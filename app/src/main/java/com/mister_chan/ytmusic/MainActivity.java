@@ -14,11 +14,12 @@ import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.PixelFormat;
 import android.graphics.Typeface;
+import android.hardware.input.InputManager;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.IBinder;
 import android.support.v4.media.MediaMetadataCompat;
 import android.support.v4.media.session.MediaSessionCompat;
-import android.util.Log;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
@@ -34,11 +35,11 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.AdapterView;
 import android.widget.Button;
-import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.NotificationCompat;
@@ -49,10 +50,8 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.regex.Matcher;
@@ -78,9 +77,23 @@ public class MainActivity extends AppCompatActivity {
             ACTION_PAUSE = "com.mister_chan.ytmusic.action.PAUSE",
             ACTION_PLAY = "com.mister_chan.ytmusic.action.PLAY";
 
+    private static final String ADVERTISEMENT = "廣告";
+    private static final String BUFFERING = "緩衝中……";
+    private static final String CENTISEC = "centisec";
+    private static final String FORWARD = "⏵";
     private static final String HOME_PAGE_URL = "https://www.youtube.com/";
+    private static final String LRC = "lrc";
+    private static final String LYRICS_PATHNAME = Environment.getExternalStorageDirectory().getPath() + "/YTMusic/lyrics/%s.lrc";
+    private static final String MIN = "min";
+    private static final String OFFSET = "offset";
+    private static final String PAUSE = "⏸";
     private static final String PLAYER = "document.getElementById(\"movie_player\")";
+    private static final String SEC = "sec";
+    private static final String TI = "ti";
     private static final String YOUTUBE_MUSIC = "YouTube Music";
+
+    private static final String STRING_EMPTY = "";
+    private static final String STRING_NULL = "null";
 
     private static final String JS_ADD_ON_STATE_CHANGE_LISTENER = "javascript:" +
             "var cancelPauses = false;" +
@@ -96,6 +109,9 @@ public class MainActivity extends AppCompatActivity {
             "        player.addEventListener(\"onStateChange\", data => onStateChange(data));" +
             "    }" +
             "}, 100);";
+
+    private static final String JS_CLEAR_SKIPPING_TIMER = "javascript:" +
+            "clearInterval(skippingTimer);";
 
     private static final String JS_EXIT_FULLSCREEN = "javascript:" +
             "var isExitingFullscreen = false;" +
@@ -134,14 +150,22 @@ public class MainActivity extends AppCompatActivity {
             "    currentTime;" +
             "}";
 
-    private static final String JS_NEXT_VIDEO = "javascript:" + PLAYER + ".seekTo(" + PLAYER + ".getDuration())";
-    private static final String JS_PAUSE_VIDEO = "javascript:" + PLAYER + ".pauseVideo()";
-    private static final String JS_PLAY_VIDEO = "javascript:" + PLAYER + ".playVideo()";
+    private static final String JS_GET_DURATION = "" +
+            "player.getDuration();";
+
+    private static final String JS_PAUSE_VIDEO = "javascript:" +
+            PLAYER + ".pauseVideo();";
+
+    private static final String JS_PLAY_VIDEO = "javascript:" +
+            PLAYER + ".playVideo();";
 
     private static final String JS_REMOVE_FULLSCREEN_BUTTONS = "javascript:" +
             "document.getElementsByClassName(\"ytp-fullscreen-button\")[0].setAttribute(\"style\", \"display: none;\");" +
             "document.getElementsByClassName(\"ytp-size-button\")[0].setAttribute(\"style\", \"display: none;\");" +
             "document.getElementsByClassName(\"ytp-miniplayer-button\")[0].setAttribute(\"style\", \"display: none;\");";
+
+    private static final String JS_SEEK_TO = "javascript:" +
+            "player.seekTo(%f);";
 
     private static final String JS_SET_PLAYER = "javascript:" +
             "var player;" +
@@ -152,8 +176,11 @@ public class MainActivity extends AppCompatActivity {
             "    }" +
             "}, 100);";
 
-    private static final String JS_SET_SKIPPINGS = "javascript:var skippings = [%s];";
-    private static final String JS_SET_NO_SKIPPINGS = String.format(JS_SET_SKIPPINGS, "");
+    private static final String JS_SET_SKIPPINGS = "javascript:" +
+            "var skippings = [%s];";
+
+    private static final String JS_SET_NO_SKIPPINGS =
+            String.format(JS_SET_SKIPPINGS, STRING_EMPTY);
 
     private static final String JS_SKIP = "javascript:" +
             "var skippingTimer = setInterval(() => {" +
@@ -193,6 +220,9 @@ public class MainActivity extends AppCompatActivity {
             "        }" +
             "    }" +
             "}, 100);";
+
+    private static final String JS_SKIP_TO_NEXT_VIDEO = "javascript:" +
+            PLAYER + ".seekTo(" + PLAYER + ".getDuration())";
 
     private static final String JS_START_CANCELLING_PAUSES = "javascript:" +
             "cancelPauses = true;" +
@@ -264,7 +294,7 @@ public class MainActivity extends AppCompatActivity {
     private ProgressBar pbProgress;
     private String title = YOUTUBE_MUSIC;
     private String jsSetSkippings = JS_SET_NO_SKIPPINGS;
-    private String nowPlaying = "";
+    private String nowPlaying = STRING_EMPTY;
     String lyricsLinePure = YOUTUBE_MUSIC;
     TextView[] tvLyricsLines;
     private TextView tvFloatingLyrics;
@@ -281,13 +311,13 @@ public class MainActivity extends AppCompatActivity {
             String action = intent.getAction();
             switch (action) {
                 case ACTION_PLAY:
-                    player.loadUrl(JS_PLAY_VIDEO);
+                    playVideo();
                     break;
                 case ACTION_PAUSE:
-                    player.loadUrl(JS_PAUSE_VIDEO);
+                    pauseVideo();
                     break;
                 case ACTION_NEXT:
-                    player.loadUrl(JS_NEXT_VIDEO);
+                    skipToNextVideo();
                     break;
                 case ACTION_LYRICS:
                     floatingLyrics = !floatingLyrics;
@@ -311,6 +341,23 @@ public class MainActivity extends AppCompatActivity {
                     isScreenOff = false;
                     break;
             }
+        }
+    };
+
+    private final MediaSessionCompat.Callback mediaSessionCallback = new MediaSessionCompat.Callback() {
+        @Override
+        public void onPlay() {
+            playVideo();
+        }
+
+        @Override
+        public void onPause() {
+            pauseVideo();
+        }
+
+        @Override
+        public void onSkipToNext() {
+            skipToNextVideo();
         }
     };
 
@@ -339,105 +386,108 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
+    private final ValueCallback<String> onReceiveDurationCallback = value -> {
+        if (STRING_NULL.equals(value)) {
+            return;
+        }
+        shouldGetDuration = false;
+        duration = (long) Float.parseFloat(value);
+        pbFullscreenProgress.setMax((int) duration);
+        pbProgress.setMax((int) duration);
+        if (!isScreenOff) {
+            sendNotification();
+        }
+    };
+
+    /**
+     * Params: value – Current time in seconds.
+     */
+    private final ValueCallback<String> onReceiveCurrentTimeCallback = value -> {
+
+        if (STRING_NULL.equals(value)) {
+            return;
+        }
+        float currentTime = Float.parseFloat(value);
+        pbFullscreenProgress.setProgress((int) currentTime);
+        pbProgress.setProgress((int) currentTime);
+        if (currentTime <= 0) {
+            return;
+        }
+
+        // Show lyrics
+        if (lyrics.length > 0 && playerState == PLAYER_STATE_PLAYING) {
+            if (shouldUpdateIndexOfLyricsLineFromCurrentTime) {
+                shouldUpdateIndexOfLyricsLineFromCurrentTime = false;
+                int earlier = 0, later = lyrics.length - 1, mid;
+                while (earlier < later) {
+                    mid = earlier + ((later - earlier) >> 1);
+                    float time = lyrics[mid].time;
+                    if (time < currentTime) {
+                        earlier = mid + 1;
+                    } else if (time > currentTime) {
+                        later = mid - 1;
+                    } else {
+                        // earlier = mid;
+                        later = mid;
+                        break;
+                    }
+                }
+                indexOfNextLyricsLine = Math.max(later, 0);
+                nextLyricsLine = lyrics[indexOfNextLyricsLine];
+            }
+            if (currentTime >= nextLyricsLine.time) {
+                String line = nextLyricsLine.lyrics;
+                line = stylizeLyrics(line);
+                lyricsLinePure = line;
+                tvFloatingLyrics.setText(line);
+                if (isScreenOff) {
+                    notificationService.sendScreenNotification(MainActivity.this, getTitleForNotification());
+                } else {
+                    scrollToLyricsLine(indexOfNextLyricsLine);
+                    highlightLyricsLine(indexOfNextLyricsLine);
+                }
+                if (++indexOfNextLyricsLine < lyrics.length) {
+                    nextLyricsLine = lyrics[indexOfNextLyricsLine];
+                } else {
+                    nextLyricsLine = new LyricsLine(Float.MAX_VALUE, null);
+                }
+            }
+        }
+
+        // Should-dos
+        if (shouldSeekToLastPosition) {
+            shouldSeekToLastPosition = false;
+            if (currentTime < lastPosition) {
+                seekTo(lastPosition);
+            }
+        } else if (shouldSetSkippings) {
+            shouldSetSkippings = false;
+            player.loadUrl(jsSetSkippings);
+            player.loadUrl(JS_SKIP);
+        }
+        if (shouldGetDuration) {
+            player.evaluateJavascript(JS_GET_DURATION, onReceiveDurationCallback);
+        }
+        if (shouldFullScreen) {
+            shouldFullScreen = false;
+            toggleFullscreen();
+            player.loadUrl(JS_REMOVE_FULLSCREEN_BUTTONS);
+        }
+
+        lastPosition = currentTime;
+    };
+
     private final TimerTask lyricsTimerTask = new TimerTask() {
         @Override
         public void run() {
-
-            runOnUiThread(() -> player.evaluateJavascript(JS_GET_CURRENT_TIME, value -> {
-                // value - current time in seconds
-                if ("null".equals(value)) {
-                    return;
-                }
-                float currentTime = Float.parseFloat(value);
-                pbFullscreenProgress.setProgress((int) currentTime);
-                pbProgress.setProgress((int) currentTime);
-                if (currentTime <= 0) {
-                    return;
-                }
-
-                // Show lyrics
-                if (lyrics.length > 0 && playerState == PLAYER_STATE_PLAYING) {
-                    if (shouldUpdateIndexOfLyricsLineFromCurrentTime) {
-                        shouldUpdateIndexOfLyricsLineFromCurrentTime = false;
-                        int earlier = 0, later = lyrics.length - 1, mid;
-                        while (earlier < later) {
-                            mid = earlier + ((later - earlier) >> 1);
-                            float time = lyrics[mid].time;
-                            if (time < currentTime) {
-                                earlier = mid + 1;
-                            } else if (time > currentTime) {
-                                later = mid - 1;
-                            } else {
-                                // earlier = mid;
-                                later = mid;
-                                break;
-                            }
-                        }
-                        indexOfNextLyricsLine = Math.max(later, 0);
-                        nextLyricsLine = lyrics[indexOfNextLyricsLine];
-                    }
-                    if (currentTime >= nextLyricsLine.time) {
-                        String line = nextLyricsLine.lyrics;
-                        line = stylizeLyrics(line);
-                        lyricsLinePure = line;
-                        tvFloatingLyrics.setText(line);
-                        if (isScreenOff) {
-                            notificationService.sendScreenNotification(MainActivity.this, getTitleForNotification());
-                        } else {
-                            scrollToLyricsLine(indexOfNextLyricsLine);
-                            highlightLyricsLine(indexOfNextLyricsLine);
-                        }
-                        if (++indexOfNextLyricsLine < lyrics.length) {
-                            nextLyricsLine = lyrics[indexOfNextLyricsLine];
-                        } else {
-                            nextLyricsLine = new LyricsLine(Float.MAX_VALUE, null);
-                        }
-                    }
-                }
-
-                // Should-dos
-                if (shouldSeekToLastPosition) {
-                    shouldSeekToLastPosition = false;
-                    if (currentTime < lastPosition) {
-                        seekTo(lastPosition);
-                    }
-                } else if (shouldSetSkippings) {
-                    shouldSetSkippings = false;
-                    player.loadUrl(jsSetSkippings);
-                    player.loadUrl(JS_SKIP);
-                }
-                if (shouldGetDuration) {
-                    player.evaluateJavascript("player.getDuration()", new ValueCallback<String>() {
-                        @Override
-                        public void onReceiveValue(String value) {
-                            if ("null".equals(value)) {
-                                return;
-                            }
-                            shouldGetDuration = false;
-                            duration = (long) Float.parseFloat(value);
-                            pbFullscreenProgress.setMax((int) duration);
-                            pbProgress.setMax((int) duration);
-                            if (!isScreenOff) {
-                                sendNotification();
-                            }
-                        }
-                    });
-                }
-                if (shouldFullScreen) {
-                    shouldFullScreen = false;
-                    setFullscreen(true);
-                    player.loadUrl(JS_REMOVE_FULLSCREEN_BUTTONS);
-                }
-
-                lastPosition = currentTime;
-            }));
+            runOnUiThread(() -> player.evaluateJavascript(JS_GET_CURRENT_TIME, onReceiveCurrentTimeCallback));
         }
     };
 
     private final WebChromeClient playerChromeClient = new WebChromeClient() {
         @Override
         public void onReceivedTitle(WebView view, String title) {
-            title = title.replace(" - YouTube", "");
+            title = title.replace(" - YouTube", STRING_EMPTY);
             MainActivity.this.title = title;
             tvFullscreenTitle.setText(title);
             tvTitle.setText(title);
@@ -514,7 +564,7 @@ public class MainActivity extends AppCompatActivity {
             String v = isVideo(url);
             if (v != null) {
                 view.goBack();
-                player.loadUrl(url.replace("&pbj=1", "").replace("://m.", "://www."));
+                player.loadUrl(url.replace("&pbj=1", STRING_EMPTY).replace("://m.", "://www."));
                 bringToFront(player);
             }
         }
@@ -561,8 +611,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private String getTitleForNotification() {
-        return isPlayingAd ? "廣告"
-                : playerState == PLAYER_STATE_BUFFERING ? "緩衝中……"
+        return isPlayingAd ? ADVERTISEMENT
+                : playerState == PLAYER_STATE_BUFFERING ? BUFFERING
                 : title;
     }
 
@@ -631,11 +681,11 @@ public class MainActivity extends AppCompatActivity {
 
         // Initial views
         bFullscreenNextVideo.setTypeface(Typeface.createFromAsset(getAssets(), "Player.ttf"));
-        bFullscreenNextVideo.setOnClickListener(v -> player.loadUrl(JS_NEXT_VIDEO));
+        bFullscreenNextVideo.setOnClickListener(v -> player.loadUrl(JS_SKIP_TO_NEXT_VIDEO));
         bFullscreenPlayPause.setTypeface(Typeface.createFromAsset(getAssets(), "Player.ttf"));
         bFullscreenPlayPause.setOnClickListener(v -> toggleState());
         bNextVideo.setTypeface(Typeface.createFromAsset(getAssets(), "Player.ttf"));
-        bNextVideo.setOnClickListener(v -> player.loadUrl(JS_NEXT_VIDEO));
+        bNextVideo.setOnClickListener(v -> player.loadUrl(JS_SKIP_TO_NEXT_VIDEO));
         bPlayPause.setTypeface(Typeface.createFromAsset(getAssets(), "Player.ttf"));
         bPlayPause.setOnClickListener(v -> toggleState());
         lvLyrics.setOnItemClickListener(onLyricsItemClickListener);
@@ -664,10 +714,12 @@ public class MainActivity extends AppCompatActivity {
         wmlp.width = WindowManager.LayoutParams.MATCH_PARENT;
         wmlp.height = WindowManager.LayoutParams.WRAP_CONTENT;
         wmlp.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL;
-        wmlp.format = PixelFormat.RGBA_8888;
+        wmlp.alpha = 0.8f;
+        wmlp.format = PixelFormat.RGB_565;
         wmlp.gravity = Gravity.CENTER_VERTICAL | Gravity.TOP;
         wmlp.type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
         tvFloatingLyrics = new TextView(this);
+        tvFloatingLyrics.setClickable(false);
         tvFloatingLyrics.setPadding(0, 0x100, 0, 0);
         tvFloatingLyrics.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
         tvFloatingLyrics.setTextColor(Color.RED);
@@ -708,6 +760,8 @@ public class MainActivity extends AppCompatActivity {
                 .putString(MediaMetadataCompat.METADATA_KEY_TITLE, YOUTUBE_MUSIC)
                 .build()
         );
+        mediaSession.setCallback(mediaSessionCallback);
+        mediaSession.setActive(true);
         Intent notificationIntent = new Intent(this, NotificationService.class);
         bindService(notificationIntent, connection, Context.BIND_AUTO_CREATE);
 
@@ -719,11 +773,14 @@ public class MainActivity extends AppCompatActivity {
 
         // Start timer
         lyricsTimer = new Timer();
-        lyricsTimer.schedule(lyricsTimerTask, 1000, 100);
+        lyricsTimer.schedule(lyricsTimerTask, 1000L, 100L);
     }
 
     @Override
     protected void onDestroy() {
+        mediaSession.setCallback(null);
+        mediaSession.setActive(false);
+        mediaSession.release();
         stopService(new Intent(this, NotificationService.class));
         lyricsTimer.cancel();
         super.onDestroy();
@@ -757,11 +814,17 @@ public class MainActivity extends AppCompatActivity {
     protected void onPause() {
         player.loadUrl(JS_START_CANCELLING_PAUSES);
         super.onPause();
+        if (floatingLyrics) {
+            tvFloatingLyrics.setVisibility(View.VISIBLE);
+        }
     }
 
     @Override
     protected void onResume() {
         super.onResume();
+        if (floatingLyrics && llFullscreen.getVisibility() == View.VISIBLE) {
+            tvFloatingLyrics.setVisibility(View.GONE);
+        }
     }
 
     @JavascriptInterface
@@ -769,12 +832,12 @@ public class MainActivity extends AppCompatActivity {
         playerState = data;
 
         if (data == PLAYER_STATE_PLAYING) {
-            bFullscreenPlayPause.setText("⏸");
-            bPlayPause.setText("⏸");
+            bFullscreenPlayPause.setText(PAUSE);
+            bPlayPause.setText(PAUSE);
             shouldUpdateIndexOfLyricsLineFromCurrentTime = true;
         } else {
-            bFullscreenPlayPause.setText("⏵");
-            bPlayPause.setText("⏵");
+            bFullscreenPlayPause.setText(FORWARD);
+            bPlayPause.setText(FORWARD);
         }
 
         sendNotification();
@@ -789,8 +852,16 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private void pauseVideo() {
+        player.loadUrl(JS_PAUSE_VIDEO);
+    }
+
+    private void playVideo() {
+        player.loadUrl(JS_PLAY_VIDEO);
+    }
+
     private void prepareNewVideo(String v) {
-        player.loadUrl("javascript:clearInterval(skippingTimer);");
+        player.loadUrl(JS_CLEAR_SKIPPING_TIMER);
         jsSetSkippings = JS_SET_NO_SKIPPINGS;
         player.loadUrl(jsSetSkippings);
         isPlayingAd = false;
@@ -819,20 +890,20 @@ public class MainActivity extends AppCompatActivity {
     private void readLyrics(String v) {
         lyrics = new LyricsLine[0];
         List<LyricsLine> lyricsMap = new ArrayList<>();
-        lyricsMap.add(new LyricsLine(0.0f, ""));
+        lyricsMap.add(new LyricsLine(0.0f, STRING_EMPTY));
         lyricsLinePure = YOUTUBE_MUSIC;
         tvFloatingLyrics.setTextColor(Color.RED);
         indexOfNextLyricsLine = 0;
         indexOfHighlightedLyricsLine = -1;
-        nextLyricsLine = new LyricsLine(0.0f, "");
+        nextLyricsLine = new LyricsLine(0.0f, STRING_EMPTY);
         lvLyrics.setVisibility(View.GONE);
         lvLyrics.setAdapter(null);
         tvLyricsLines = new TextView[0];
         llNoLyricsWarning.setVisibility(View.GONE);
         StringBuilder skippings = new StringBuilder();
-        File file = new File("/sdcard" + "/YTMusic/lyrics/" + v + ".lrc");
+        File file = new File(String.format(LYRICS_PATHNAME, v));
         if (!file.exists()) {
-            tvFloatingLyrics.setText("");
+            tvFloatingLyrics.setText(STRING_EMPTY);
             llNoLyricsWarning.setVisibility(View.VISIBLE);
             return;
         }
@@ -843,16 +914,16 @@ public class MainActivity extends AppCompatActivity {
                 Matcher matcher;
                 if ((matcher = PATTERN_LYRICS.matcher(line)).find()) {
                     for (int i = 0; matcher.find(i); i += 10) {
-                        float time = Float.parseFloat(matcher.group("min")) * 60f
-                                + Float.parseFloat(matcher.group("sec"))
-                                + Float.parseFloat(matcher.group("centisec")) * 0.01f
+                        float time = Float.parseFloat(matcher.group(MIN)) * 60f
+                                + Float.parseFloat(matcher.group(SEC))
+                                + Float.parseFloat(matcher.group(CENTISEC)) * 0.01f
                                 + offset * 0.001f;
-                        lyricsMap.add(new LyricsLine(time, matcher.group("lrc").toUpperCase(Locale.ROOT)));
+                        lyricsMap.add(new LyricsLine(time, matcher.group(LRC).toUpperCase(Locale.ROOT)));
                     }
                 } else if ((matcher = Pattern.compile("\\[ti:(?<ti>.*)\\]").matcher(line)).find()) {
-                    tvFloatingLyrics.setText(stylizeLyrics(matcher.group("ti")).toUpperCase(Locale.ROOT));
+                    tvFloatingLyrics.setText(stylizeLyrics(matcher.group(TI)).toUpperCase(Locale.ROOT));
                 } else if ((matcher = Pattern.compile("\\[offset:(?<offset>.*)\\]").matcher(line)).find()) {
-                    offset = Float.parseFloat(matcher.group("offset"));
+                    offset = Float.parseFloat(matcher.group(OFFSET));
                 } else if ((matcher = Pattern.compile("\\[skipping:(?<from>.*),(?<to>.*)\\]").matcher(line)).find()) {
                     skippings.append(", {from: ").append(matcher.group("from")).append(", to: ").append(matcher.group("to")).append("}");
                 }
@@ -862,7 +933,7 @@ public class MainActivity extends AppCompatActivity {
         }
         if (lyricsMap.size() > 1) {
             lyricsMap.sort(Comparator.comparingDouble(l -> l.time));
-            lyricsMap.add(new LyricsLine(Float.MAX_VALUE, ""));
+            lyricsMap.add(new LyricsLine(Float.MAX_VALUE, STRING_EMPTY));
             lyrics = lyricsMap.toArray(lyrics);
             nextLyricsLine = lyrics[0];
 
@@ -873,7 +944,7 @@ public class MainActivity extends AppCompatActivity {
             lvLyrics.scrollTo(0, 0);
             setLyricsViewVisibility(true);
         }
-        if (!"".equals(skippings.toString())) {
+        if (!STRING_EMPTY.equals(skippings.toString())) {
             jsSetSkippings = String.format(JS_SET_SKIPPINGS, skippings.substring(2));
         }
     }
@@ -886,7 +957,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void seekTo(float seconds) {
-        player.loadUrl("javascript:player.seekTo(" + seconds + ")");
+        player.loadUrl(String.format(JS_SEEK_TO, seconds));
     }
 
     @JavascriptInterface
@@ -916,6 +987,10 @@ public class MainActivity extends AppCompatActivity {
     @JavascriptInterface
     public void setPlayingAd(boolean playingAd) {
         isPlayingAd = playingAd;
+    }
+
+    private void skipToNextVideo() {
+        player.loadUrl(JS_SKIP_TO_NEXT_VIDEO);
     }
 
     private String stylizeLyrics(String lyrics) {
