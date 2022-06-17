@@ -8,7 +8,7 @@
         android:id="@+id/tv_lyrics"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@drawable/btn_bg_selector"
+        android:background="?android:attr/selectableItemBackground"
         android:gravity="center"
         android:padding="16dp"
         android:textColor="#FFCCCCCC"

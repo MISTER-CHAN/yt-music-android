@@ -1,7 +1,9 @@
 <resources>
     <string name="app_name">YT Music</string>
     <string name="forward_symbol">⏵</string>
-    <string name="next_file_symbol">⏭</string>
     <string name="pause_symbol">⏸</string>
+    <string name="skip_to_next_symbol">⏭</string>
     <string name="youtube_music">YouTube Music</string>
+    <string name="search_for_lyrics">搜尋歌詞</string>
+    <string name="ignore">忽略</string>
 </resources>

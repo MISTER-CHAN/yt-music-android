@@ -57,7 +57,7 @@
                 style="?android:attr/buttonBarButtonStyle"
                 android:layout_width="48dp"
                 android:layout_height="wrap_content"
-                android:text="@string/next_file_symbol"
+                android:text="@string/skip_to_next_symbol"
                 android:textColor="@color/black"
                 android:textSize="24sp" />
         </LinearLayout>
@@ -133,7 +133,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:padding="8dp"
-                    android:text="搜尋歌詞"
+                    android:text="@string/search_for_lyrics"
                     android:textColor="#FF7F7FFF" />
 
                 <TextView
@@ -141,7 +141,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:padding="8dp"
-                    android:text="忽略"
+                    android:text="@string/ignore"
                     android:textColor="#FF7F7FFF" />
             </LinearLayout>
         </FrameLayout>
@@ -159,7 +159,7 @@
                 style="?android:attr/buttonBarButtonStyle"
                 android:layout_width="48dp"
                 android:layout_height="wrap_content"
-                android:text="⏵"
+                android:text="@string/forward_symbol"
                 android:textColor="@color/white"
                 android:textSize="24sp" />
 
@@ -168,7 +168,7 @@
                 style="?android:attr/buttonBarButtonStyle"
                 android:layout_width="48dp"
                 android:layout_height="wrap_content"
-                android:text="⏭"
+                android:text="@string/skip_to_next_symbol"
                 android:textColor="@color/white"
                 android:textSize="24sp" />
         </LinearLayout>

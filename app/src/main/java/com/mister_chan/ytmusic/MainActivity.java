@@ -14,7 +14,6 @@ import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.PixelFormat;
 import android.graphics.Typeface;
-import android.hardware.input.InputManager;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.IBinder;
@@ -39,7 +38,6 @@ import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.NotificationCompat;
@@ -69,6 +67,9 @@ public class MainActivity extends AppCompatActivity {
             PLAYER_STATE_CUED = 5;
 
     private static final Pattern PATTERN_LYRICS = Pattern.compile("\\[(?<min>\\d{2}):(?<sec>\\d{2})\\.(?<centisec>\\d{2})\\](?:\\[\\d{2}:\\d{2}\\.\\d{2}\\])*(?<lrc>[^\\[\\]]+)$");
+    private static final Pattern PATTERN_OFFSET = Pattern.compile("\\[offset:(?<offset>.*)\\]");
+    private static final Pattern PATTERN_SKIPPING = Pattern.compile("\\[skipping:(?<from>.*),(?<to>.*)\\]");
+    private static final Pattern PATTERN_TITLE = Pattern.compile("\\[ti:(?<ti>.*)\\]");
     private static final Pattern PATTERN_VIDEO_URL = Pattern.compile("^https?://(?:www|m)\\.youtube\\.com/.*[?&]v=(?<v>[-0-9A-Z_a-z]+)");
 
     static final String
@@ -81,21 +82,23 @@ public class MainActivity extends AppCompatActivity {
     private static final String BUFFERING = "緩衝中……";
     private static final String CENTISEC = "centisec";
     private static final String FORWARD = "⏵";
+    private static final String FROM = "from";
     private static final String HOME_PAGE_URL = "https://www.youtube.com/";
     private static final String LRC = "lrc";
     private static final String LYRICS_PATHNAME = Environment.getExternalStorageDirectory().getPath() + "/YTMusic/lyrics/%s.lrc";
     private static final String MIN = "min";
     private static final String OFFSET = "offset";
     private static final String PAUSE = "⏸";
-    private static final String PLAYER = "document.getElementById(\"movie_player\")";
+    private static final String PLAYER = "document.getElementById('movie_player')";
     private static final String SEC = "sec";
     private static final String TI = "ti";
+    private static final String TO = "to";
     private static final String YOUTUBE_MUSIC = "YouTube Music";
 
     private static final String STRING_EMPTY = "";
     private static final String STRING_NULL = "null";
 
-    private static final String JS_ADD_ON_STATE_CHANGE_LISTENER = "javascript:" +
+    private static final String JS_ADD_LISTENERS = "javascript:" +
             "var cancelPauses = false;" +
             "var onStateChange = (data) => {" +
             "    if (cancelPauses && data == 2) {" +
@@ -103,46 +106,25 @@ public class MainActivity extends AppCompatActivity {
             "    }" +
             "    mainActivity.onStateChange(data);" +
             "};" +
-            "var addOnStateChangeListenerTimer = setInterval(() => {" +
-            "    if (typeof player != \"undefined\" && player != null) {" +
-            "        clearInterval(addOnStateChangeListenerTimer);" +
-            "        player.addEventListener(\"onStateChange\", data => onStateChange(data));" +
+            "var shouldBeFullscreen = true;" +
+            "var onFullscreenChange = (event) => {" +
+            "    if (shouldBeFullscreen ^ player.isFullscreen()) {" +
+            "        player.toggleFullscreen();" +
+            "    }" +
+            "};" +
+            "var addListenersTimer = setInterval(() => {" +
+            "    if (typeof player != 'undefined' && player != null) {" +
+            "        clearInterval(addListenersTimer);" +
+            "        player.addEventListener('onStateChange', onStateChange);" +
+            "        player.addEventListener('onFullscreenChange', onFullscreenChange);" +
             "    }" +
             "}, 100);";
 
     private static final String JS_CLEAR_SKIPPING_TIMER = "javascript:" +
             "clearInterval(skippingTimer);";
 
-    private static final String JS_EXIT_FULLSCREEN = "javascript:" +
-            "var isExitingFullscreen = false;" +
-            "var exitFullscreenTimer = setInterval(() => {" +
-            "    if ((typeof isEnteringFullscreen == \"undefined\" || !isEnteringFullscreen) && typeof player != \"undefined\" && player != null) {" +
-            "        if (!isExitingFullscreen) {" +
-            "            player.toggleFullscreen();" +
-            "            isExitingFullscreen = true;" +
-            "        } else if (!player.isFullscreen()) {" +
-            "            clearInterval(exitFullscreenTimer);" +
-            "            isExitingFullscreen = false;" +
-            "        }" +
-            "    }" +
-            "}, 100);";
-
-    private static final String JS_FULLSCREEN = "javascript:" +
-            "var isEnteringFullscreen = false;" +
-            "var fullscreenTimer = setInterval(() => {" +
-            "    if ((typeof isExitingFullscreen == \"undefined\" || !isExitingFullscreen) && typeof player != \"undefined\" && player != null) {" +
-            "        if (!isEnteringFullscreen) {" +
-            "            player.toggleFullscreen();" +
-            "            isEnteringFullscreen = true;" +
-            "        } else if (player.isFullscreen()) {" +
-            "            clearInterval(fullscreenTimer);" +
-            "            isEnteringFullscreen = false;" +
-            "        }" +
-            "    }" +
-            "}, 100);";
-
     private static final String JS_GET_CURRENT_TIME = "" +
-            "if (typeof player != \"undefined\" && player != null) {" +
+            "if (typeof player != 'undefined' && player != null) {" +
             "    var currentTime = 0;" +
             "    try {" +
             "        currentTime = player.getCurrentTime();" +
@@ -160,9 +142,9 @@ public class MainActivity extends AppCompatActivity {
             PLAYER + ".playVideo();";
 
     private static final String JS_REMOVE_FULLSCREEN_BUTTONS = "javascript:" +
-            "document.getElementsByClassName(\"ytp-fullscreen-button\")[0].setAttribute(\"style\", \"display: none;\");" +
-            "document.getElementsByClassName(\"ytp-size-button\")[0].setAttribute(\"style\", \"display: none;\");" +
-            "document.getElementsByClassName(\"ytp-miniplayer-button\")[0].setAttribute(\"style\", \"display: none;\");";
+            "document.getElementsByClassName('ytp-fullscreen-button')[0].setAttribute('style', 'display: none;');" +
+            "document.getElementsByClassName('ytp-size-button')[0].setAttribute('style', 'display: none;');" +
+            "document.getElementsByClassName('ytp-miniplayer-button')[0].setAttribute('style', 'display: none;');";
 
     private static final String JS_SEEK_TO = "javascript:" +
             "player.seekTo(%f);";
@@ -184,7 +166,7 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String JS_SKIP = "javascript:" +
             "var skippingTimer = setInterval(() => {" +
-            "    if (typeof skippings != \"undefined\") {" +
+            "    if (typeof skippings != 'undefined') {" +
             "        for (const skipping of skippings) {" +
             "            if (currentTime >= skipping.from) {" +
             "                if (currentTime < skipping.to) {" +
@@ -201,9 +183,9 @@ public class MainActivity extends AppCompatActivity {
     private static final String JS_SKIP_AD = "javascript:" +
             "var isPlayingAd = false;" +
             "setInterval(() => {" +
-            "    if (typeof player != \"undefined\" && player != null) {" +
-            "        if (document.getElementsByClassName(\"ytp-ad-player-overlay\").length > 0) {" +
-            "            let skip = document.getElementsByClassName(\"ytp-ad-skip-button\")[0];" +
+            "    if (typeof player != 'undefined' && player != null) {" +
+            "        if (document.getElementsByClassName('ytp-ad-player-overlay').length > 0) {" +
+            "            let skip = document.getElementsByClassName('ytp-ad-skip-button')[0];" +
             "            if (skip != null) {" +
             "                skip.click();" +
             "            } else if (!player.isMuted()) {" +
@@ -229,11 +211,11 @@ public class MainActivity extends AppCompatActivity {
             "setTimeout(() => cancelPauses = false, 1000);";
 
     private static final String JS_TOGGLE_FULLSCREEN = "javascript:" +
-            "if (typeof player != \"undefined\" && player != null) {" +
+            "if (typeof player != 'undefined' && player != null) {" +
             "    player.toggleFullscreen();" +
             "} else {" +
             "    var fullscreenTimer = setInterval(() => {" +
-            "        if (typeof player != \"undefined\" && player != null) {" +
+            "        if (typeof player != 'undefined' && player != null) {" +
             "            clearInterval(fullscreenTimer);" +
             "            player.toggleFullscreen();" +
             "        }" +
@@ -241,7 +223,7 @@ public class MainActivity extends AppCompatActivity {
             "}";
 
     private static final String JS_TOGGLE_STATE = "javascript:" +
-            "if (typeof player != \"undefined\" && player != null) {" +
+            "if (typeof player != 'undefined' && player != null) {" +
             "    if (player.getPlayerState() == " + PLAYER_STATE_PLAYING + ")" +
             "        player.pauseVideo();" +
             "    else" +
@@ -250,7 +232,7 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String JS_UNMUTE = "javascript:" +
             "var unmutingTimer = setInterval(() => {" +
-            "    if (typeof player != \"undefined\" && player != null) {" +
+            "    if (typeof player != 'undefined' && player != null) {" +
             "        clearInterval(unmutingTimer);" +
             "        player.unMute();" +
             "    }" +
@@ -264,10 +246,10 @@ public class MainActivity extends AppCompatActivity {
     private boolean isCustomViewShowed = false;
     private boolean isPlayingAd = false;
     private boolean isScreenOff = false;
-    private boolean shouldSetSkippings = false;
+    private boolean shouldEnterFullScreen = false;
     private boolean shouldGetDuration = false;
     private boolean shouldSeekToLastPosition = false;
-    private boolean shouldFullScreen = false;
+    private boolean shouldSetSkippings = false;
     private boolean shouldUpdateIndexOfLyricsLineFromCurrentTime = false;
     private Button bFullscreenNextVideo;
     private Button bFullscreenPlayPause;
@@ -468,8 +450,8 @@ public class MainActivity extends AppCompatActivity {
         if (shouldGetDuration) {
             player.evaluateJavascript(JS_GET_DURATION, onReceiveDurationCallback);
         }
-        if (shouldFullScreen) {
-            shouldFullScreen = false;
+        if (shouldEnterFullScreen) {
+            shouldEnterFullScreen = false;
             toggleFullscreen();
             player.loadUrl(JS_REMOVE_FULLSCREEN_BUTTONS);
         }
@@ -546,7 +528,7 @@ public class MainActivity extends AppCompatActivity {
             String v = isVideo(url);
             if (v != null) {
                 view.loadUrl(JS_SET_PLAYER);
-                view.loadUrl(JS_ADD_ON_STATE_CHANGE_LISTENER);
+                view.loadUrl(JS_ADD_LISTENERS);
                 view.loadUrl(JS_SKIP_AD);
             }
         }
@@ -604,7 +586,7 @@ public class MainActivity extends AppCompatActivity {
             llMain.setVisibility(View.GONE);
             llFullscreen.setVisibility(View.VISIBLE);
             if (floatingLyrics && lyrics.length > 0) {
-                tvFloatingLyrics.setVisibility(View.GONE);
+                tvFloatingLyrics.setVisibility(lvLyrics.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE);
             }
         }
         frontView = view;
@@ -822,7 +804,9 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        if (floatingLyrics && llFullscreen.getVisibility() == View.VISIBLE) {
+        if (floatingLyrics
+                && llFullscreen.getVisibility() == View.VISIBLE
+                && lvLyrics.getVisibility() == View.VISIBLE) {
             tvFloatingLyrics.setVisibility(View.GONE);
         }
     }
@@ -875,13 +859,13 @@ public class MainActivity extends AppCompatActivity {
         shouldGetDuration = true;
         shouldSeekToLastPosition = false;
         shouldSetSkippings = true;
-        shouldFullScreen = !isCustomViewShowed;
+        shouldEnterFullScreen = !isCustomViewShowed;
     }
 
     private String purifyLyrics(String lyrics) {
-        char c = '\0';
+        char c;
         if (lyrics.length() >= 3 && lyrics.charAt(1) == ':' && lyrics.charAt(2) == ' '
-                && ((c = lyrics.charAt(0)) == 'M') || c == 'F' || c == 'D') {
+                && ((c = lyrics.charAt(0)) == 'M' || c == 'F' || c == 'D')) {
             return lyrics.substring(3);
         }
         return lyrics;
@@ -920,12 +904,12 @@ public class MainActivity extends AppCompatActivity {
                                 + offset * 0.001f;
                         lyricsMap.add(new LyricsLine(time, matcher.group(LRC).toUpperCase(Locale.ROOT)));
                     }
-                } else if ((matcher = Pattern.compile("\\[ti:(?<ti>.*)\\]").matcher(line)).find()) {
+                } else if ((matcher = PATTERN_TITLE.matcher(line)).find()) {
                     tvFloatingLyrics.setText(stylizeLyrics(matcher.group(TI)).toUpperCase(Locale.ROOT));
-                } else if ((matcher = Pattern.compile("\\[offset:(?<offset>.*)\\]").matcher(line)).find()) {
+                } else if ((matcher = PATTERN_OFFSET.matcher(line)).find()) {
                     offset = Float.parseFloat(matcher.group(OFFSET));
-                } else if ((matcher = Pattern.compile("\\[skipping:(?<from>.*),(?<to>.*)\\]").matcher(line)).find()) {
-                    skippings.append(", {from: ").append(matcher.group("from")).append(", to: ").append(matcher.group("to")).append("}");
+                } else if ((matcher = PATTERN_SKIPPING.matcher(line)).find()) {
+                    skippings.append(", {from: ").append(matcher.group(FROM)).append(", to: ").append(matcher.group(TO)).append("}");
                 }
             }
         } catch (IOException e) {
@@ -971,10 +955,6 @@ public class MainActivity extends AppCompatActivity {
         } else {
             notificationService.sendNotification(this, title);
         }
-    }
-
-    private void setFullscreen(boolean fullscreen) {
-        player.loadUrl(fullscreen ? JS_FULLSCREEN : JS_EXIT_FULLSCREEN);
     }
 
     private void setLyricsViewVisibility(boolean visible) {
