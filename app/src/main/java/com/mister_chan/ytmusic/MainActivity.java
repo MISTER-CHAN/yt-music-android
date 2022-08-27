@@ -254,7 +254,7 @@ public class MainActivity extends AppCompatActivity {
     private boolean isCustomViewShowed = false;
     private boolean isPlayingAd = false;
     private boolean isScreenOff = false;
-    private boolean shouldEnterFullScreen = false;
+    private boolean shouldEnterFullscreen = false;
     private boolean shouldGetDuration = false;
     private boolean shouldSeekToLastPosition = false;
     private boolean shouldSetSkippings = false;
@@ -458,8 +458,8 @@ public class MainActivity extends AppCompatActivity {
         if (shouldGetDuration) {
             player.evaluateJavascript(JS_GET_DURATION, onReceiveDurationCallback);
         }
-        if (shouldEnterFullScreen) {
-            shouldEnterFullScreen = false;
+        if (shouldEnterFullscreen) {
+            shouldEnterFullscreen = false;
             toggleFullscreen();
             player.loadUrl(JS_HIDE_FULLSCREEN_BUTTONS);
         }
@@ -876,7 +876,7 @@ public class MainActivity extends AppCompatActivity {
         shouldGetDuration = true;
         shouldSeekToLastPosition = false;
         shouldSetSkippings = true;
-        shouldEnterFullScreen = !isCustomViewShowed;
+        shouldEnterFullscreen = !isCustomViewShowed;
     }
 
     private String purifyLyrics(String lyrics) {
