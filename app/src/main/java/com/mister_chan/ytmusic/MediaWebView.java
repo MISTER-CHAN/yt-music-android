@@ -10,6 +10,8 @@ import androidx.annotation.Nullable;
 
 public class MediaWebView extends WebView {
 
+    boolean b = true;
+
     public MediaWebView(@NonNull Context context) {
         super(context);
     }
@@ -28,8 +30,9 @@ public class MediaWebView extends WebView {
 
     @Override
     protected void onWindowVisibilityChanged(int visibility) {
-        if (visibility != View.GONE) {
+        if (b && visibility != View.GONE) {
             super.onWindowVisibilityChanged(visibility);
+            b = false;
         }
     }
 }

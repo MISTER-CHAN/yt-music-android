@@ -38,6 +38,7 @@ import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.NotificationCompat;
@@ -101,17 +102,17 @@ public class MainActivity extends AppCompatActivity {
     private static final String JS_ADD_LISTENERS = "javascript:" +
             "var cancelPauses = false;" +
             "var onStateChange = (data) => {" +
-            "    if (cancelPauses && data == 2) {" +
-            "        player.playVideo();" +
-            "    }" +
+//            "    if (cancelPauses && data == 2) {" +
+//            "        player.playVideo();" +
+//            "    }" +
             "    mainActivity.onStateChange(data);" +
             "};" +
-            "var shouldBeFullscreen = true;" +
-            "var onFullscreenChange = (event) => {" +
-            "    if (shouldBeFullscreen ^ player.isFullscreen()) {" +
-            "        player.toggleFullscreen();" +
-            "    }" +
-            "};" +
+//            "var shouldBeFullscreen = true;" +
+//            "var onFullscreenChange = (event) => {" +
+//            "    if (shouldBeFullscreen ^ player.isFullscreen()) {" +
+//            "        player.toggleFullscreen();" +
+//            "    }" +
+//            "};" +
             "var addListenersTimer = setInterval(() => {" +
             "    if (typeof player != 'undefined' && player != null) {" +
             "        clearInterval(addListenersTimer);" +
@@ -122,6 +123,13 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String JS_CLEAR_SKIPPING_TIMER = "javascript:" +
             "clearInterval(skippingTimer);";
+
+    private static final String JS_ENTER_FULLSCREEN = "javascript:" +
+            "setTimeout(() => {" +
+            "    if (!player.isFullscreen()) {" +
+            "        player.toggleFullscreen();" +
+            "    }" +
+            "}, %d);";
 
     private static final String JS_GET_CURRENT_TIME = "" +
             "if (typeof player != 'undefined' && player != null) {" +
@@ -135,16 +143,16 @@ public class MainActivity extends AppCompatActivity {
     private static final String JS_GET_DURATION = "" +
             "player.getDuration();";
 
+    private static final String JS_HIDE_FULLSCREEN_BUTTONS = "javascript:" +
+            "document.getElementsByClassName('ytp-fullscreen-button')[0].setAttribute('style', 'display: none;');" +
+            "document.getElementsByClassName('ytp-size-button')[0].setAttribute('style', 'display: none;');" +
+            "document.getElementsByClassName('ytp-miniplayer-button')[0].setAttribute('style', 'display: none;');";
+
     private static final String JS_PAUSE_VIDEO = "javascript:" +
             PLAYER + ".pauseVideo();";
 
     private static final String JS_PLAY_VIDEO = "javascript:" +
             PLAYER + ".playVideo();";
-
-    private static final String JS_REMOVE_FULLSCREEN_BUTTONS = "javascript:" +
-            "document.getElementsByClassName('ytp-fullscreen-button')[0].setAttribute('style', 'display: none;');" +
-            "document.getElementsByClassName('ytp-size-button')[0].setAttribute('style', 'display: none;');" +
-            "document.getElementsByClassName('ytp-miniplayer-button')[0].setAttribute('style', 'display: none;');";
 
     private static final String JS_SEEK_TO = "javascript:" +
             "player.seekTo(%f);";
@@ -453,7 +461,7 @@ public class MainActivity extends AppCompatActivity {
         if (shouldEnterFullScreen) {
             shouldEnterFullScreen = false;
             toggleFullscreen();
-            player.loadUrl(JS_REMOVE_FULLSCREEN_BUTTONS);
+            player.loadUrl(JS_HIDE_FULLSCREEN_BUTTONS);
         }
 
         lastPosition = currentTime;
@@ -590,6 +598,10 @@ public class MainActivity extends AppCompatActivity {
             }
         }
         frontView = view;
+    }
+
+    private void enterFullscreen(int timeout) {
+        player.loadUrl(String.format(JS_ENTER_FULLSCREEN, timeout));
     }
 
     private String getTitleForNotification() {
@@ -794,7 +806,8 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onPause() {
-        player.loadUrl(JS_START_CANCELLING_PAUSES);
+//        player.loadUrl(JS_START_CANCELLING_PAUSES);
+        toggleFullscreen();
         super.onPause();
         if (floatingLyrics) {
             tvFloatingLyrics.setVisibility(View.VISIBLE);
@@ -809,6 +822,7 @@ public class MainActivity extends AppCompatActivity {
                 && lvLyrics.getVisibility() == View.VISIBLE) {
             tvFloatingLyrics.setVisibility(View.GONE);
         }
+        enterFullscreen(1000);
     }
 
     @JavascriptInterface
@@ -832,6 +846,9 @@ public class MainActivity extends AppCompatActivity {
         if (hasEverPlayed) {
             if (frontView == webView) {
                 bringToFront(isCustomViewShowed ? llFullscreen : player);
+                if (!isCustomViewShowed) {
+                    enterFullscreen(1000);
+                }
             }
         }
     }
