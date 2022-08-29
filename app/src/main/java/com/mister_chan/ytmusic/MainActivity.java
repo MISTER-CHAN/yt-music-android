@@ -131,6 +131,11 @@ public class MainActivity extends AppCompatActivity {
             "    }" +
             "}, %d);";
 
+    private static final String JS_EXIT_FULLSCREEN = "javascript:" +
+            "if (player.isFullscreen()) {" +
+            "    player.toggleFullscreen();" +
+            "}";
+
     private static final String JS_GET_CURRENT_TIME = "" +
             "if (typeof player != 'undefined' && player != null) {" +
             "    var currentTime = 0;" +
@@ -252,6 +257,7 @@ public class MainActivity extends AppCompatActivity {
     private boolean floatingLyrics = true;
     private boolean hasEverPlayed = false;
     private boolean isCustomViewShowed = false;
+    private boolean isPaused = false;
     private boolean isPlayingAd = false;
     private boolean isScreenOff = false;
     private boolean shouldEnterFullscreen = false;
@@ -460,7 +466,7 @@ public class MainActivity extends AppCompatActivity {
         }
         if (shouldEnterFullscreen) {
             shouldEnterFullscreen = false;
-            toggleFullscreen();
+//            toggleFullscreen();
             player.loadUrl(JS_HIDE_FULLSCREEN_BUTTONS);
         }
 
@@ -526,6 +532,9 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onPageFinished(WebView view, String url) {
             view.getSettings().setBlockNetworkImage(false);
+            if (!isPaused) {
+                enterFullscreen(0);
+            }
             super.onPageFinished(view, url);
         }
 
@@ -602,6 +611,10 @@ public class MainActivity extends AppCompatActivity {
 
     private void enterFullscreen(int timeout) {
         player.loadUrl(String.format(JS_ENTER_FULLSCREEN, timeout));
+    }
+
+    private void exitFullscreen() {
+        player.loadUrl(JS_EXIT_FULLSCREEN);
     }
 
     private String getTitleForNotification() {
@@ -807,7 +820,8 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onPause() {
 //        player.loadUrl(JS_START_CANCELLING_PAUSES);
-        toggleFullscreen();
+        exitFullscreen();
+        isPaused = true;
         super.onPause();
         if (floatingLyrics) {
             tvFloatingLyrics.setVisibility(View.VISIBLE);
@@ -817,6 +831,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        isPaused = false;
         if (floatingLyrics
                 && llFullscreen.getVisibility() == View.VISIBLE
                 && lvLyrics.getVisibility() == View.VISIBLE) {
